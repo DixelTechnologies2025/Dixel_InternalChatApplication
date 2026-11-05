@@ -1,4 +1,4 @@
-# Dixel Pulse: employee-only internal messaging
+# Dixel Nexora: employee-only internal messaging
 
 A private, real-time chat application for Dixel Technologies employees.
 Node.js + Express, SQLite, WebSockets, and a plain HTML/CSS/JS frontend (no build step).
