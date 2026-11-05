@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dixel Nexora</title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="app" id="app">
+  <aside class="side" aria-label="Conversations">
+    <div class="side-head">
+      <a class="brand app-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"><span>Dixel Nexora</span></a>
+      <div class="profile">
+        <span class="avatar account-avatar" id="meAvatar" aria-hidden="true">…</span>
+        <div class="who"><b id="meName">Loading…</b><span id="meDept"></span></div>
+      </div>
+      <div class="side-actions">
+        <a class="iconbtn hidden" id="adminLink" href="/admin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.7-3 8-7 10-4-2-7-5.3-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>Admin</a>
+        <button class="iconbtn" id="logout" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>Sign out</button>
+      </div>
+    </div>
+    <div class="search"><label class="sr" for="q">Search employees by name or department</label>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><input id="q" type="search" placeholder="Search by name or department" autocomplete="off"></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabChats" aria-selected="true" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H9l-5 4V5Z"/><path d="M8 10h8M8 13h5"/></svg>Chats<span class="badge hidden" id="totalUnread">0</span></button>
+      <button role="tab" id="tabPeople" aria-selected="false" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-3 2.4-4.5 5.5-4.5s5 1.5 5.5 4.5M16 5.5a3 3 0 0 1 0 5.8M17 15c2.2.5 3.4 1.8 3.7 4"/></svg>Employees</button>
+    </div>
+    <ul class="list" id="list"></ul>
+  </aside>
+  <section class="pane" id="pane" aria-label="Conversation">
+    <div class="pane-empty" id="paneEmpty">
+      <img class="logo empty-logo" src="/img/logo.png" alt="Dixel Technologies">
+      <p><b>Welcome to Dixel Nexora</b><br>Pick a colleague to start a conversation.</p>
+    </div>
+    <div class="hidden" id="chatView"></div>
+  </section>
+</div>
+<script src="/js/common.js"></script><script src="/js/chat.js"></script>
+</body></html>

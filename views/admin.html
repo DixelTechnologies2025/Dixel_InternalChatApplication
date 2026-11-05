@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administration · Dixel Nexora</title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="admin">
+  <header>
+    <a class="brand admin-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"><span>Dixel Nexora <small>Administration</small></span></a>
+    <div class="header-actions"><a class="btn ghost sm" href="/chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h14"/></svg>Back to chat</a> <button class="btn ghost sm" id="logout" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>Sign out</button></div>
+  </header>
+  <div id="alert" class="alert hidden" role="status" aria-live="polite"></div>
+
+  <section class="panel"><h2>Waiting for approval</h2>
+    <p class="hint lead">These people verified their company email but are not on the invite list.</p>
+    <div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Employee ID</th><th>Department</th><th>Registered</th><th></th></tr></thead><tbody id="pending"></tbody></table></div>
+  </section>
+
+  <section class="panel"><h2>Invite an employee</h2>
+    <p class="hint lead">Invited employees are activated automatically once they verify their email. If you add an Employee ID, they must enter the same one when signing up.</p>
+    <form class="inline-form" id="inviteForm">
+      <div class="field flush"><label for="iEmail">Company email</label><input id="iEmail" type="email" required></div>
+      <div class="field flush"><label for="iEmp">Employee ID <span class="opt">(optional)</span></label><input id="iEmp" type="text" maxlength="40"></div>
+      <div class="field flush"><label for="iDept">Department <span class="opt">(optional)</span></label><input id="iDept" type="text" maxlength="80"></div>
+      <button class="btn" type="submit">Add invite</button>
+    </form>
+    <div class="tablewrap gap"><table><thead><tr><th>Email</th><th>Employee ID</th><th>Department</th><th>Status</th><th></th></tr></thead><tbody id="invites"></tbody></table></div>
+  </section>
+
+  <section class="panel"><h2>All employees</h2>
+    <div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
+  </section>
+</div>
+<script src="/js/common.js"></script><script src="/js/admin.js"></script>
+</body></html>
