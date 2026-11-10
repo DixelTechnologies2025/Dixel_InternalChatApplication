@@ -10,6 +10,7 @@ const rt = require('./realtime');
 const { smtpConfigured } = require('./mailer');
 
 const app = express();
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 if (cfg.trustProxy) app.set('trust proxy', 1);
 
