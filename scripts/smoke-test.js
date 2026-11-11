@@ -6,7 +6,7 @@ const WebSocket = require('ws');
 
 const PORT = 3190, BASE = `http://localhost:${PORT}`, DOMAIN = 'dixeltechnologies.com';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dixel-test-'));
-const env = { ...process.env, PORT: String(PORT), APP_URL: BASE, DB_PATH: path.join(tmp, 'test.db'), SMTP_HOST: '', NODE_ENV: 'test', TRUST_PROXY: 'true' };
+const env = { ...process.env, PORT: String(PORT), APP_URL: BASE, DB_PATH: path.join(tmp, 'test.db'), ADMIN_EMAIL: `admin@${DOMAIN}`, ADMIN_PASSWORD: 'Str0ngPassw0rd!', SMTP_HOST: '', NODE_ENV: 'test', TRUST_PROXY: 'true' };
 const root = path.join(__dirname, '..');
 let pass = 0, fail = 0;
 let nextClientIp = 1;
@@ -58,7 +58,7 @@ const wsOpen = (cookie) => new Promise((res) => {
 });
 
 (async () => {
-  const cli = spawnSync('node', ['scripts/create-admin.js', `admin@${DOMAIN}`, 'Ada Admin', pw], { cwd: root, env });
+  const cli = spawnSync('node', ['scripts/create-admin.js', `cli-admin@${DOMAIN}`, 'CLI Admin', pw], { cwd: root, env });
   ok(cli.status === 0, 'create-admin script creates administrator');
   const server = spawn('node', ['src/server.js'], { cwd: root, env, stdio: 'ignore' });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '/login.html'); break; } catch (e) { await sleep(150); } }

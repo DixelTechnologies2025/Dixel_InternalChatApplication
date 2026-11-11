@@ -1,9 +1,9 @@
 // Usage: npm run create-admin -- admin@dixeltechnologies.com "Full Name" [password]
 // If the password is omitted you will be prompted (input is visible; run in a trusted terminal).
 const readline = require('readline');
-const bcrypt = require('bcryptjs');
 const cfg = require('../src/config');
 const db = require('../src/db');
+const { hashPassword } = require('../src/passwords');
 const S = require('../src/security');
 
 (async () => {
@@ -21,7 +21,7 @@ const S = require('../src/security');
   }
   const pp = S.passwordProblem(password);
   if (pp) { console.error(pp); process.exit(1); }
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await hashPassword(password);
   const now = Date.now();
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existing) {

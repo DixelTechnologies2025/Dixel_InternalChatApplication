@@ -77,11 +77,16 @@ housekeeping();
 setInterval(housekeeping, 3600 * 1000).unref();
 
 if (require.main === module) {
-  server.listen(cfg.port, () => {
-    console.log(`${cfg.companyName} chat running at ${cfg.appUrl} (port ${cfg.port})`);
-    if (!smtpConfigured) console.log('[mail] SMTP not configured: password reset links print here and in data/dev-mail.log');
-    const admins = db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get().n;
-    if (!admins) console.log('[setup] No administrator yet. Run: npm run create-admin -- you@' + cfg.companyDomain + ' "Your Name"');
+  db.seedAdmin().then(() => {
+    server.listen(cfg.port, () => {
+      console.log(`${cfg.companyName} chat running at ${cfg.appUrl} (port ${cfg.port})`);
+      if (!smtpConfigured) console.log('[mail] SMTP not configured: password reset links print here and in data/dev-mail.log');
+      const admins = db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get().n;
+      if (!admins) console.log('[setup] No administrator yet. Set ADMIN_EMAIL and ADMIN_PASSWORD or run: npm run create-admin -- you@' + cfg.companyDomain + ' "Your Name"');
+    });
+  }).catch((err) => {
+    console.error('[setup] Failed to seed administrator:', err);
+    process.exitCode = 1;
   });
 }
 module.exports = { app, server };

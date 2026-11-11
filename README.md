@@ -19,10 +19,15 @@ Requires Node.js 18 or newer.
 ```bash
 npm install
 cp .env.example .env            # Windows: copy .env.example .env
-npm run create-admin -- admin@dixeltechnologies.com "Your Name"   # prompts for a password
+# Set ADMIN_EMAIL and ADMIN_PASSWORD in .env to create the initial administrator.
 npm start
 ```
 Open http://localhost:3000
+
+On startup, the app creates an active administrator from `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` only when that email is not already registered. Keep
+`ADMIN_PASSWORD` secret. `DB_PATH` selects the SQLite database file, including
+Render's persistent-disk mount path.
 
 **Without SMTP configured** (development), password reset links are printed in the terminal and saved in `data/dev-mail.log`. Copy the link into your browser.
 

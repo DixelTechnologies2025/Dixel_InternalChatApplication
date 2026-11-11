@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const cfg = require('./config');
+const { hashPassword } = require('./passwords');
 
 fs.mkdirSync(path.dirname(cfg.dbPath), { recursive: true });
 const db = new Database(cfg.dbPath);
@@ -26,5 +27,32 @@ function audit(actorId, action, target, ip) {
     .run(actorId || null, action, target == null ? null : String(target), ip || null, Date.now());
 }
 
+async function seedAdmin() {
+  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email && !password) return false;
+  if (!email || !password) {
+    throw new Error('Both ADMIN_EMAIL and ADMIN_PASSWORD must be set to seed an administrator.');
+  }
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
+    console.log(`[setup] Administrator ${email} already exists; skipping seed.`);
+    return false;
+  }
+
+  const now = Date.now();
+  const passwordHash = await hashPassword(password);
+  const info = db.prepare(`INSERT INTO users
+    (full_name, email, password_hash, role, status, email_verified_at, created_at)
+    VALUES ('Administrator', ?, ?, 'admin', 'active', ?, ?)
+    ON CONFLICT(email) DO NOTHING`).run(email, passwordHash, now, now);
+  if (!info.changes) {
+    console.log(`[setup] Administrator ${email} already exists; skipping seed.`);
+    return false;
+  }
+  console.log(`[setup] Created administrator ${email}.`);
+  return true;
+}
+
 module.exports = db;
 module.exports.audit = audit;
+module.exports.seedAdmin = seedAdmin;

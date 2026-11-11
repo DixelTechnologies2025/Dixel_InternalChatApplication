@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { BCRYPT_COST, hashPassword } = require('../passwords');
 const rateLimit = require('express-rate-limit');
 const cfg = require('../config');
 const db = require('../db');
@@ -8,7 +9,6 @@ const rt = require('../realtime');
 const S = require('../security');
 
 const router = express.Router();
-const BCRYPT_COST = 12;
 const dummyHash = bcrypt.hashSync('not-a-real-password', BCRYPT_COST); // equalises timing for unknown emails
 
 const limiter = (max, minutes) => rateLimit({
@@ -40,7 +40,7 @@ router.post('/signup', limiter(10, 60), async (req, res) => {
 
   const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!existing) {
-    const hash = await bcrypt.hash(b.password, BCRYPT_COST);
+    const hash = await hashPassword(b.password);
     const invite = db.prepare('SELECT * FROM invites WHERE email = ?').get(email);
     const invited = !!invite && (!invite.employee_id || invite.employee_id === employeeId);
     const status = invited && cfg.autoApproveInvited ? 'active' : 'pending';
@@ -118,7 +118,7 @@ router.post('/reset', limiter(10, 15), async (req, res) => {
   if (!row || row.used_at || row.expires_at < Date.now()) {
     return res.status(400).json({ message: 'This reset link is invalid or has expired. Request a new one.' });
   }
-  const hash = await bcrypt.hash(password, BCRYPT_COST);
+  const hash = await hashPassword(password);
   db.transaction(() => {
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.user_id);
     db.prepare('UPDATE tokens SET used_at = ? WHERE id = ?').run(Date.now(), row.id);
