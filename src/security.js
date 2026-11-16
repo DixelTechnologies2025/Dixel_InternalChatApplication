@@ -29,29 +29,31 @@ function cookieOptions() {
   return { httpOnly: true, sameSite: 'strict', secure: cfg.cookieSecure, path: '/', maxAge: cfg.sessionHours * 3600 * 1000 };
 }
 
-function createSession(userId) {
+async function createSession(userId) {
   const raw = newToken();
   const now = Date.now();
-  db.prepare('INSERT INTO sessions (user_id, token_hash, created_at, expires_at) VALUES (?,?,?,?)')
+  await db.prepare('INSERT INTO sessions (user_id, token_hash, created_at, expires_at) VALUES (?,?,?,?)')
     .run(userId, sha256(raw), now, now + cfg.sessionHours * 3600 * 1000);
   return raw;
 }
 
 const publicUser = (u) => ({
   id: u.id, fullName: u.full_name, email: u.email, employeeId: u.employee_id,
-  department: u.department, role: u.role,
+  department: u.department, role: u.role, avatarVersion: u.avatar_version || null,
 });
 
-function authFromToken(raw) {
+async function authFromToken(raw) {
   if (!raw || typeof raw !== 'string') return null;
-  const row = db.prepare(`
-    SELECT u.*, s.id AS session_id, s.token_hash FROM sessions s JOIN users u ON u.id = s.user_id
+  const row = await db.prepare(`
+    SELECT u.*, s.id AS session_id, s.token_hash,
+      (SELECT updated_at FROM user_avatars WHERE user_id = u.id) AS avatar_version
+    FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'active'`).get(sha256(raw), Date.now());
   return row || null;
 }
 
-function requireAuth(req, res, next) {
-  const user = authFromToken(req.cookies && req.cookies[COOKIE]);
+async function requireAuth(req, res, next) {
+  const user = await authFromToken(req.cookies && req.cookies[COOKIE]);
   if (!user) return res.status(401).json({ message: 'Sign in to continue.' });
   req.user = user;
   next();

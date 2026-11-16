@@ -29,10 +29,33 @@
     const p = String(name).trim().split(/\s+/);
     return ((p[0] || '')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
   }
+  function updateAvatar(node, user) {
+    node.dataset.userId = String(user.id);
+    const version = user.avatarVersion || null;
+    node.dataset.avatarVersion = version == null ? '' : String(version);
+    let image = node.querySelector('.avatar-photo');
+    if (!version) {
+      if (image) image.remove();
+      return;
+    }
+    if (!image) {
+      image = el('img', { class: 'avatar-photo', alt: '', 'aria-hidden': 'true' });
+      node.append(image);
+    }
+    const src = '/api/users/' + encodeURIComponent(user.id) + '/avatar?v=' + encodeURIComponent(version);
+    if (image.dataset.avatarVersion !== String(version)) {
+      image.dataset.avatarVersion = String(version);
+      image.onerror = () => {
+        if (node.dataset.avatarVersion === String(version)) image.remove();
+      };
+      image.src = src;
+    }
+  }
   function avatar(user, small, withDot) {
     const cls = 'avatar av' + (user.id % 6) + (small ? ' sm' : '');
-    const a = el('span', { class: cls, 'aria-hidden': 'true', text: initials(user.fullName) });
+    const a = el('span', { class: cls, 'aria-hidden': 'true', text: initials(user.fullName), 'data-user-id': user.id });
     if (withDot) a.append(el('span', { class: 'dot' + (user.online ? ' on' : '') }));
+    updateAvatar(a, user);
     return a;
   }
   function setLoading(btn, on) { btn.disabled = on; btn.classList.toggle('loading', on); }
@@ -66,5 +89,5 @@
       button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
     });
   });
-  window.D = { api, el, initials, avatar, setLoading, showAlert, clearFieldErrors, fieldErrors };
+  window.D = { api, el, initials, avatar, updateAvatar, setLoading, showAlert, clearFieldErrors, fieldErrors };
 })();

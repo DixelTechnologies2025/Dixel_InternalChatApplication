@@ -1,7 +1,7 @@
 # Dixel Nexora: employee-only internal messaging
 
 A private, real-time chat application for Dixel Technologies employees.
-Node.js + Express, SQLite, WebSockets, and a plain HTML/CSS/JS frontend (no build step).
+Node.js + Express, Turso (hosted libSQL) or local SQLite, WebSockets, and a plain HTML/CSS/JS frontend (no build step).
 
 ## What it does
 - Sign-up and login restricted to `@dixeltechnologies.com` (checked on the server, exact domain match).
@@ -9,6 +9,12 @@ Node.js + Express, SQLite, WebSockets, and a plain HTML/CSS/JS frontend (no buil
 - Passwords hashed with bcrypt (cost 12); sessions stored server-side, cookie is `HttpOnly` + `SameSite=Strict`.
 - Employee directory (name/department search), private 1:1 chats, real-time delivery, history, timestamps,
   last message in the conversation list, unread counts, read ticks, online/last-seen.
+- Employee profile panel with read-only account details and profile photos stored in the database
+  and shared with active employees.
+- Group chats with admin-managed group profile photos stored in the database and shared only
+  with group members; photos are served by authenticated, versioned avatar endpoints.
+- Daily office attendance with explicit check-in/check-out, server-time records, and an admin
+  attendance report with filters, monthly summaries, CSV export, and admin-only live updates.
 - Admin page: approve/reject sign-ups, invite employees, deactivate/reactivate (deactivation signs the user out instantly).
 - Forgot/reset password (one-time, 1-hour link).
 - Messages auto-deleted after `RETENTION_DAYS` (default 365).
@@ -24,10 +30,12 @@ npm start
 ```
 Open http://localhost:3000
 
-On startup, the app creates an active administrator from `ADMIN_EMAIL` and
-`ADMIN_PASSWORD` only when that email is not already registered. Keep
-`ADMIN_PASSWORD` secret. `DB_PATH` selects the SQLite database file, including
-Render's persistent-disk mount path.
+On startup, the app applies `migrations/*.sql` and creates an active administrator
+from `ADMIN_EMAIL` and `ADMIN_PASSWORD` only when that email is not already
+registered. Keep `ADMIN_PASSWORD` secret. When `TURSO_DATABASE_URL` and
+`TURSO_AUTH_TOKEN` are both set, all database operations use Turso. When both are
+omitted, local development uses the SQLite file selected by `DB_PATH` (default
+`./data/chat.db`). Set both Turso variables together; setting only one is an error.
 
 **Without SMTP configured** (development), password reset links are printed in the terminal and saved in `data/dev-mail.log`. Copy the link into your browser.
 
@@ -43,26 +51,28 @@ Employees sign up at `/signup.html` and can sign in at `/login.html` after an ad
 
 ## Production checklist
 - Serve over HTTPS (reverse proxy such as nginx/Caddy) and set `APP_URL=https://...`, `COOKIE_SECURE=true`, `TRUST_PROXY=true`, `NODE_ENV=production`.
+- Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the hosting provider's environment. The app runs pending migrations before opening its HTTP listener; no Render persistent disk is needed for database storage.
 - Configure SMTP so password reset emails are delivered.
-- Back up `data/chat.db` regularly (it contains messages and accounts). Keep the folder out of web roots and version control.
 - Run with a process manager (systemd, pm2) and keep Node.js and dependencies patched (`npm audit`).
 - Messages are protected by access control and TLS in transit; they are not end-to-end encrypted, and anyone with server/database access can read them.
 
 ## Project layout
 ```
 src/server.js        app entry, security headers, page guards, retention job
-src/routes/          auth.js, chat.js, admin.js (REST API under /api)
+src/routes/          auth.js, chat.js, admin.js, attendance.js (REST API under /api)
+                     admin-attendance.js (admin attendance reports and CSV)
 src/realtime.js      authenticated WebSocket (/ws) and presence
+src/attendance-time.js server-side Asia/Kolkata work-date helper
 src/security.js      validation, sessions, auth middleware
-src/db.js            SQLite connection + migration runner
-migrations/          SQL schema and approval-flow updates
+src/db.js            Turso/local SQLite client + migration runner
+migrations/          SQL schema and approval-flow updates, including daily attendance
 public/              login/signup/forgot/reset pages, CSS, browser JS
 views/               chat.html and admin.html (served only to signed-in users)
 scripts/             create-admin.js, smoke-test.js
 ```
 
 ## Tests
-`npm test` starts a temporary server and database and runs end-to-end checks: domain restriction, pending approval, invite activation, login, route protection, real-time delivery, history, conversation isolation, logout, deactivation, and password reset.
+`npm test` starts a temporary server and database and runs end-to-end checks: domain restriction, pending approval, invite activation, login, route protection, real-time delivery, history, conversation isolation, logout, deactivation, and password reset. `npm run test:group-avatars` exercises group photo authorization, storage, privacy, validation, auditing, and realtime updates. `node tests/profile.test.js` exercises profile APIs, and `node tests/attendance.test.js` exercises attendance and its admin report; these tests run on temporary copies of the development database.
 
 ## Security notes
 - All authorization is enforced on the server for REST and WebSocket; conversation IDs from the browser are never trusted.

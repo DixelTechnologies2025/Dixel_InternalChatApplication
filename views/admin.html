@@ -1,13 +1,48 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Administration · Dixel Nexora</title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css"></head>
+<title>Administration</title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css"></head>
 <body>
 <div class="admin">
   <header>
-    <a class="brand admin-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"><span>Dixel Nexora <small>Administration</small></span></a>
+    <a class="brand admin-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"><span><small>Administration</small></span></a>
     <div class="header-actions"><a class="btn ghost sm" href="/chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h14"/></svg>Back to chat</a> <button class="btn ghost sm" id="logout" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>Sign out</button></div>
   </header>
   <div id="alert" class="alert hidden" role="status" aria-live="polite"></div>
+
+  <section class="panel" id="attendancePanel">
+    <h2>Attendance</h2>
+    <p class="hint lead">Office attendance is separate from signing in to the app. Times are shown in your local timezone.</p>
+    <div class="attendance-filters">
+      <div class="field flush"><label for="attendanceView">View</label>
+        <select id="attendanceView"><option value="daily">Daily attendance</option><option value="monthly">Monthly summary</option></select>
+      </div>
+      <div class="field flush attendance-daily-filter"><label for="attendanceDate">Date</label><input id="attendanceDate" type="date"></div>
+      <div class="field flush attendance-range-filter"><label for="attendanceFrom">From</label><input id="attendanceFrom" type="date"></div>
+      <div class="field flush attendance-range-filter"><label for="attendanceTo">To</label><input id="attendanceTo" type="date"></div>
+      <div class="field flush attendance-month-filter hidden"><label for="attendanceMonth">Month</label><input id="attendanceMonth" type="month"></div>
+      <div class="field flush"><label for="attendanceSearch">Name or department</label><input id="attendanceSearch" type="search" maxlength="100" placeholder="Search employees"></div>
+      <button class="btn sm" id="loadAttendance" type="button">Load</button>
+      <button class="btn ghost sm" id="exportAttendance" type="button">Export CSV</button>
+    </div>
+    <div class="attendance-summary-cards" id="attendanceSummaryCards">
+      <div><b id="attendancePresent">0</b><span>Present</span></div>
+      <div><b id="attendanceNotCheckedIn">0</b><span>Not checked in yet</span></div>
+      <div><b id="attendanceWorking">0</b><span>Currently working</span></div>
+      <div><b id="attendanceCheckedOut">0</b><span>Checked out</span></div>
+    </div>
+    <div class="tablewrap attendance-daily-table" id="attendanceDailyTable">
+      <table><thead><tr>
+        <th><button class="attendance-sort" data-sort="name" type="button">Employee name</button></th>
+        <th>Employee ID</th><th>Department</th><th>Date</th>
+        <th><button class="attendance-sort" data-sort="entry" type="button">Entry time</button></th>
+        <th>Leaving time</th><th>Total hours</th><th>Status</th>
+      </tr></thead><tbody id="attendanceRows"><tr><td colspan="8" class="hint">Loading attendance…</td></tr></tbody></table>
+    </div>
+    <div class="tablewrap attendance-monthly-table hidden" id="attendanceMonthlyTable">
+      <table><thead><tr><th>Employee name</th><th>Employee ID</th><th>Department</th><th>Days present</th><th>Total hours</th></tr></thead>
+        <tbody id="attendanceMonthlyRows"></tbody></table>
+    </div>
+  </section>
 
   <section class="panel"><h2>Waiting for approval</h2>
     <p class="hint lead">These people verified their company email but are not on the invite list.</p>
@@ -29,5 +64,5 @@
     <div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
   </section>
 </div>
-<script src="/js/common.js"></script><script src="/js/admin.js"></script>
+<script src="/js/common.js?v=20261112-5"></script><script src="/js/admin.js?v=20261112-5"></script>
 </body></html>

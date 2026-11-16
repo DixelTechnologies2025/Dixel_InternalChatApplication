@@ -1,16 +1,23 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dixel Nexora</title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css"></head>
+<title></title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css?v=20261116-1"></head>
 <body>
 <div class="app" id="app">
   <aside class="side" aria-label="Conversations">
     <div class="side-head">
-      <a class="brand app-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"><span>Dixel Nexora</span></a>
-      <div class="profile">
-        <span class="avatar account-avatar" id="meAvatar" aria-hidden="true">…</span>
-        <div class="who"><b id="meName">Loading…</b><span id="meDept"></span></div>
+      <a class="brand app-brand" href="/chat"><img class="logo" src="/img/logo.png" alt="Dixel Technologies"></a>
+      <div class="profile-attendance-row">
+        <div class="profile" id="openProfile" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Open your profile">
+          <span class="avatar account-avatar" id="meAvatar" aria-hidden="true">…</span>
+          <div class="who"><b id="meName">Loading…</b><span id="meDept"></span></div>
+        </div>
+        <div class="attendance-control" aria-live="polite">
+          <button class="btn sm attendance-button" id="attendanceAction" type="button" disabled>Loading…</button>
+          <span class="attendance-summary" id="attendanceSummary"></span>
+        </div>
       </div>
       <div class="side-actions">
+        <button class="iconbtn" id="newGroup" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-3 2.4-4.5 5.5-4.5s5 1.5 5.5 4.5M17 8v6M14 11h6"/></svg>New Group</button>
         <a class="iconbtn hidden" id="adminLink" href="/admin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.7-3 8-7 10-4-2-7-5.3-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>Admin</a>
         <button class="iconbtn" id="logout" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>Sign out</button>
       </div>
@@ -26,10 +33,90 @@
   <section class="pane" id="pane" aria-label="Conversation">
     <div class="pane-empty" id="paneEmpty">
       <img class="logo empty-logo" src="/img/logo.png" alt="Dixel Technologies">
-      <p><b>Welcome to Dixel Nexora</b><br>Pick a colleague to start a conversation.</p>
+      <p><b>Welcome</b><br>Pick a colleague to start a conversation.</p>
     </div>
     <div class="hidden" id="chatView"></div>
   </section>
 </div>
-<script src="/js/common.js"></script><script src="/js/chat.js"></script>
+<dialog id="createGroupDialog">
+  <form class="auth-card" id="createGroupForm">
+    <h1>New Group</h1><p class="sub">Create a group with active employees.</p>
+    <div class="field"><label for="groupName">Group name</label><input id="groupName" maxlength="60" required autocomplete="off"></div>
+    <div class="field"><label for="groupEmployeeSearch">Search employees</label><input id="groupEmployeeSearch" type="search" autocomplete="off" placeholder="Search by name or department"></div>
+    <div class="field"><label for="groupEmployeeSelect">Members</label><select id="groupEmployeeSelect" multiple size="7" aria-describedby="groupCreateHint"></select><div class="hint" id="groupCreateHint">Select one or more employees. You will be the group admin.</div></div>
+    <div class="alert error hidden" id="groupCreateError" role="alert"></div>
+    <div class="side-actions"><button class="btn ghost" id="cancelGroupCreate" type="button">Cancel</button><button class="btn" type="submit">Create group</button></div>
+  </form>
+</dialog>
+<dialog id="groupMembersDialog">
+  <div class="auth-card">
+    <h1 id="groupMembersTitle">Group members</h1>
+    <p class="sub" id="groupMembersSubtitle"></p>
+    <div class="group-photo-wrap">
+      <span class="avatar av1 group-avatar group-profile-photo" id="groupPhotoAvatar" aria-hidden="true"></span>
+      <button class="profile-camera group-photo-camera hidden" id="groupPhotoCamera" type="button" aria-label="Change group photo" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      </button>
+      <div class="profile-photo-menu hidden group-photo-menu" id="groupPhotoMenu">
+        <button type="button" id="chooseGroupPhoto">Upload photo</button>
+        <button type="button" class="danger-text hidden" id="removeGroupPhoto">Remove photo</button>
+      </div>
+      <input class="sr" id="groupPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
+      <div class="profile-crop hidden" id="groupPhotoCrop">
+        <p>Preview and crop the group photo</p>
+        <canvas id="groupPhotoCropCanvas" width="256" height="256" aria-label="Square crop preview"></canvas>
+        <div class="profile-crop-actions">
+          <button class="btn ghost" type="button" id="cancelGroupPhotoCrop">Cancel</button>
+          <button class="btn" type="button" id="saveGroupPhoto">Save</button>
+        </div>
+      </div>
+    </div>
+    <div class="alert error hidden" id="groupMembersError" role="alert"></div>
+    <ul class="list" id="groupMemberList"></ul>
+    <div class="field" id="groupAddField"><label for="groupMemberSearch">Search employees to add</label><input id="groupMemberSearch" type="search" autocomplete="off" placeholder="Search by name or department"></div>
+    <div class="field" id="groupAddSelectField"><label for="groupMemberSelect">Employees</label><select id="groupMemberSelect" multiple size="5"></select></div>
+    <div class="side-actions">
+      <button class="btn danger" id="leaveGroup" type="button">Leave group</button>
+      <button class="btn ghost" id="closeGroupMembers" type="button">Close</button>
+      <button class="btn" id="addGroupMembers" type="button">Add selected</button>
+    </div>
+  </div>
+</dialog>
+<dialog id="profileDialog" class="profile-dialog" aria-label="Profile">
+  <div class="profile-panel">
+    <header class="profile-panel-head">
+      <button class="profile-back" id="closeProfile" type="button" aria-label="Close profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h14"/></svg>
+      </button>
+      <h1 id="profileTitle">Profile</h1>
+    </header>
+    <section id="profileHome" class="profile-page">
+      <div class="profile-photo-wrap">
+        <span class="avatar av0 profile-photo" id="profileAvatar" aria-hidden="true"></span>
+        <button class="profile-camera" id="profileCamera" type="button" aria-label="Change profile picture" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        </button>
+        <div class="profile-photo-menu hidden" id="profilePhotoMenu">
+          <button type="button" id="chooseProfilePhoto">Upload photo</button>
+          <button type="button" class="danger-text hidden" id="removeProfilePhoto">Remove photo</button>
+        </div>
+      </div>
+      <input class="sr" id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
+      <div class="profile-crop hidden" id="profileCrop">
+        <p>Preview and crop your photo</p>
+        <canvas id="profileCropCanvas" width="256" height="256" aria-label="Square crop preview"></canvas>
+        <div class="profile-crop-actions">
+          <button class="btn ghost" type="button" id="cancelProfileCrop">Cancel</button>
+          <button class="btn" type="button" id="saveProfilePhoto">Save</button>
+        </div>
+      </div>
+      <div class="profile-details" id="profileDetails"></div>
+      <div class="profile-edit-actions hidden" id="profileEditActions">
+        <button class="btn ghost" id="cancelProfileEdit" type="button">Cancel</button>
+        <button class="btn" id="saveProfileEdit" type="button">Save</button>
+      </div>
+    </section>
+  </div>
+</dialog>
+<script src="/js/common.js?v=20261113-1"></script><script src="/js/chat.js?v=20261116-1"></script>
 </body></html>

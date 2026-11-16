@@ -4,6 +4,56 @@
   const alertBox = document.getElementById('alert');
   const page = document.body.dataset.page;
   const q = new URLSearchParams(location.search);
+  const approvalWaitingMessage = 'Your request has been sent. You can sign in after an administrator approves your account.';
+  let approvalPollTimer;
+  let approvalRedirectTimer;
+
+  function stopApprovalPolling() {
+    clearTimeout(approvalPollTimer);
+    sessionStorage.removeItem('approvalTracking');
+  }
+
+  function scheduleApprovalCheck() {
+    approvalPollTimer = setTimeout(checkApprovalStatus, 5000);
+  }
+
+  async function checkApprovalStatus() {
+    try {
+      const { status } = await api('/auth/approval-status');
+      if (status === 'active') {
+        stopApprovalPolling();
+        showAlert(alertBox, 'ok', 'Approved! You can sign in now.');
+        approvalRedirectTimer = setTimeout(() => location.replace('/login.html'), 3000);
+      } else if (status === 'rejected') {
+        stopApprovalPolling();
+        showAlert(alertBox, 'error', 'Your registration was not approved. Contact your administrator.');
+      } else if (status === 'pending') {
+        showAlert(alertBox, 'ok', approvalWaitingMessage);
+        scheduleApprovalCheck();
+      } else {
+        stopApprovalPolling();
+        showAlert(alertBox, 'error', 'Approval status is no longer available. Please contact your administrator.');
+      }
+    } catch (e) {
+      if (e.status === 401) {
+        stopApprovalPolling();
+        return;
+      }
+      showAlert(alertBox, 'error', 'Could not check approval status. Retrying automatically.');
+      scheduleApprovalCheck();
+    }
+  }
+
+  function startApprovalPolling() {
+    clearTimeout(approvalPollTimer);
+    clearTimeout(approvalRedirectTimer);
+    sessionStorage.setItem('approvalTracking', '1');
+    checkApprovalStatus();
+  }
+
+  if (page === 'signup' && sessionStorage.getItem('approvalTracking') === '1') {
+    checkApprovalStatus();
+  }
 
   async function redirectIfSignedIn() {
     try { await api('/auth/me'); location.replace('/chat'); } catch (e) { /* stay */ }
@@ -29,9 +79,10 @@
       if (page === 'reset') return location.replace('/login.html?reset=1');
       form.reset();
       const message = page === 'signup'
-        ? 'Your request has been sent. You can sign in after an administrator approves your account.'
+        ? approvalWaitingMessage
         : r.message;
       showAlert(alertBox, 'ok', message);
+      if (page === 'signup') startApprovalPolling();
     } catch (e) {
       fieldErrors(form, e.data && e.data.errors);
       showAlert(alertBox, 'error', e.message);

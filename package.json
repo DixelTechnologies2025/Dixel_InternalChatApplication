@@ -11,11 +11,12 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "create-admin": "node scripts/create-admin.js",
-    "test": "node scripts/smoke-test.js"
+    "test": "node scripts/smoke-test.js",
+    "test:group-avatars": "node tests/group-avatar.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
+    "@libsql/client": "^0.15.15",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
