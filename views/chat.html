@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title></title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css?v=20261116-1"></head>
+<title></title><link rel="icon" href="/img/logo.png"><link rel="stylesheet" href="/css/app.css?v=20261116-2"></head>
 <body>
 <div class="app" id="app">
   <aside class="side" aria-label="Conversations">
@@ -52,7 +52,7 @@
   <div class="auth-card">
     <h1 id="groupMembersTitle">Group members</h1>
     <p class="sub" id="groupMembersSubtitle"></p>
-    <div class="group-photo-wrap">
+        <div class="group-photo-wrap">
       <span class="avatar av1 group-avatar group-profile-photo" id="groupPhotoAvatar" aria-hidden="true"></span>
       <button class="profile-camera group-photo-camera hidden" id="groupPhotoCamera" type="button" aria-label="Change group photo" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -62,13 +62,18 @@
         <button type="button" class="danger-text hidden" id="removeGroupPhoto">Remove photo</button>
       </div>
       <input class="sr" id="groupPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
-      <div class="profile-crop hidden" id="groupPhotoCrop">
-        <p>Preview and crop the group photo</p>
-        <canvas id="groupPhotoCropCanvas" width="256" height="256" aria-label="Square crop preview"></canvas>
-        <div class="profile-crop-actions">
-          <button class="btn ghost" type="button" id="cancelGroupPhotoCrop">Cancel</button>
-          <button class="btn" type="button" id="saveGroupPhoto">Save</button>
-        </div>
+    </div>
+    <div class="profile-crop hidden" id="groupPhotoCrop">
+      <p>Drag to reposition, use the slider to zoom</p>
+      <canvas id="groupPhotoCropCanvas" class="crop-square" width="256" height="256" aria-label="Group photo crop area. Drag to reposition."></canvas>
+      <label class="crop-zoom">
+        <span class="sr">Zoom</span><span aria-hidden="true">−</span>
+        <input type="range" id="groupPhotoCropZoom" min="1" max="4" step="0.01" value="1">
+        <span aria-hidden="true">+</span>
+      </label>
+      <div class="profile-crop-actions">
+        <button class="btn ghost" type="button" id="cancelGroupPhotoCrop">Cancel</button>
+        <button class="btn" type="button" id="saveGroupPhoto">Save</button>
       </div>
     </div>
     <div class="alert error hidden" id="groupMembersError" role="alert"></div>
@@ -102,9 +107,14 @@
         </div>
       </div>
       <input class="sr" id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
-      <div class="profile-crop hidden" id="profileCrop">
-        <p>Preview and crop your photo</p>
-        <canvas id="profileCropCanvas" width="256" height="256" aria-label="Square crop preview"></canvas>
+        <div class="profile-crop hidden" id="profileCrop">
+        <p>Drag to reposition, use the slider to zoom</p>
+        <canvas id="profileCropCanvas" class="crop-round" width="256" height="256" aria-label="Photo crop area. Drag to reposition."></canvas>
+        <label class="crop-zoom">
+          <span class="sr">Zoom</span><span aria-hidden="true">−</span>
+          <input type="range" id="profileCropZoom" min="1" max="4" step="0.01" value="1">
+          <span aria-hidden="true">+</span>
+        </label>
         <div class="profile-crop-actions">
           <button class="btn ghost" type="button" id="cancelProfileCrop">Cancel</button>
           <button class="btn" type="button" id="saveProfilePhoto">Save</button>
@@ -118,5 +128,5 @@
     </section>
   </div>
 </dialog>
-<script src="/js/common.js?v=20261113-1"></script><script src="/js/chat.js?v=20261116-1"></script>
+<script src="/js/common.js?v=20261113-1"></script><script src="/js/chat.js?v=20261116-2"></script>
 </body></html>

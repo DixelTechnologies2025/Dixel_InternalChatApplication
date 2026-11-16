@@ -331,7 +331,12 @@ a { color: var(--brand); }
 .group-photo-menu { top: calc(100% + 10px); left: 50%; width: 180px; transform: translateX(-50%); }
 .profile-crop { display: grid; justify-items: center; gap: 12px; margin: -4px 0 24px; }
 .profile-crop p { margin: 0; color: var(--muted); }
-.profile-crop canvas { width: 220px; height: 220px; border-radius: 8px; background: #f3f6fa; object-fit: contain; }
+.profile-crop canvas { width: 240px; height: 240px; max-width: 100%; border-radius: 8px; background: #f3f6fa; cursor: grab; touch-action: none; user-select: none; }
+.profile-crop canvas:active { cursor: grabbing; }
+.profile-crop canvas.crop-round { border-radius: 50%; }
+.profile-crop canvas.crop-square { border-radius: 12px; }
+.crop-zoom { display: flex; width: 240px; max-width: 100%; align-items: center; gap: 10px; color: var(--muted); font-size: 18px; }
+.crop-zoom input[type="range"] { flex: 1; accent-color: var(--brand); }
 .profile-crop-actions { display: flex; justify-content: center; gap: 10px; }
 .profile-details { display: grid; }
 .profile-detail { padding: 14px 2px; border-bottom: 1px solid var(--line); }
@@ -376,7 +381,7 @@ a { color: var(--brand); }
 .bub .tick[aria-label="Delivered to all"]::after, .bub .tick[aria-label="Seen by all"]::after { display: block; left: 6px; }
 .bub .tick.read { color: #34b7f1; }
 .bub { position: relative; }
-.bub .edited { margin-right: 5px; font-style: italic; }
+.bub .edited { margin-left: 6px; margin-right: 0; font-style: italic; }
 .bub.deleted { color: var(--muted); font-style: italic; }
 .header-menu-wrap { position: relative; }
 .message-actions { position: absolute; z-index: 3; top: 3px; right: 3px; width: 26px; height: 26px; }

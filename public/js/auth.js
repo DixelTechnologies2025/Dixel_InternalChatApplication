@@ -84,8 +84,10 @@
       showAlert(alertBox, 'ok', message);
       if (page === 'signup') startApprovalPolling();
     } catch (e) {
-      fieldErrors(form, e.data && e.data.errors);
-      showAlert(alertBox, 'error', e.message);
+      const errors = e.data && e.data.errors;
+      const shown = errors && Object.keys(errors).some((n) => form.querySelector('[name="' + n + '"]'));
+      if (shown) fieldErrors(form, errors);
+      else showAlert(alertBox, 'error', e.message);
     } finally { setLoading(btn, false); }
   });
 })();

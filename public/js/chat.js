@@ -87,6 +87,92 @@
     const id = Number(userId) || 0;
     return 'group-sender-color-' + ((Math.abs(id) % paletteSize));
   }
+    // ---------- shared photo cropper (drag + zoom) ----------
+  let profileCropper = null, groupCropper = null;
+  function makeCropper(canvas, slider) {
+    const size = canvas.width;
+    const ctx = canvas.getContext('2d');
+    let img = null, w = 0, h = 0, base = 1, zoom = 1, x = 0, y = 0;
+    const pointers = new Map();
+    let pinchStart = null;
+    const ratio = () => size / (canvas.getBoundingClientRect().width || size);
+    const clamp = () => {
+      x = Math.min(0, Math.max(size - w * base * zoom, x));
+      y = Math.min(0, Math.max(size - h * base * zoom, y));
+    };
+    const draw = () => {
+      if (!img) return;
+      clamp();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, x, y, w * base * zoom, h * base * zoom);
+    };
+    const setZoom = (next, cx = size / 2, cy = size / 2) => {
+      next = Math.min(4, Math.max(1, next));
+      const factor = next / zoom;
+      x = cx - (cx - x) * factor;
+      y = cy - (cy - y) * factor;
+      zoom = next;
+      slider.value = String(zoom);
+      draw();
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!img) return;
+      canvas.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom };
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      const prev = pointers.get(e.pointerId);
+      if (!prev || !img) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        const r = ratio();
+        x += (e.clientX - prev.x) * r;
+        y += (e.clientY - prev.y) * r;
+        draw();
+      } else if (pointers.size === 2 && pinchStart) {
+        const [a, b] = [...pointers.values()];
+        setZoom(pinchStart.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinchStart.dist));
+      }
+    });
+    const endPointer = (e) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinchStart = null;
+    };
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+    canvas.addEventListener('wheel', (e) => {
+      if (!img) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect(), r = ratio();
+      setZoom(zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08), (e.clientX - rect.left) * r, (e.clientY - rect.top) * r);
+    }, { passive: false });
+    slider.addEventListener('input', () => { if (img) setZoom(Number(slider.value)); });
+    const release = () => {
+      if (img && typeof img.close === 'function') img.close();
+      img = null;
+      pointers.clear();
+      pinchStart = null;
+      ctx.clearRect(0, 0, size, size);
+    };
+    const load = (source) => {
+      release();
+      img = source;
+      w = source.width || source.naturalWidth;
+      h = source.height || source.naturalHeight;
+      base = Math.max(size / w, size / h);
+      zoom = 1;
+      x = (size - w * base) / 2;
+      y = (size - h * base) / 2;
+      slider.value = '1';
+      draw();
+    };
+    return { load, release };
+  }
   function toast(msg) {
     const t = el('div', { class: 'toast', role: 'status', text: msg }); document.body.append(t); setTimeout(() => t.remove(), 3500);
   }
@@ -500,7 +586,7 @@
       image.src = url;
     });
   }
-  async function readProfileFile(file) {
+    async function readProfileFile(file) {
     if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast('Choose a JPEG, PNG, or WebP image.');
       return;
@@ -508,12 +594,7 @@
     try {
       const bitmap = typeof createImageBitmap === 'function'
         ? await createImageBitmap(file) : await loadProfileImage(file);
-      const edge = Math.min(bitmap.width, bitmap.height);
-      const x = (bitmap.width - edge) / 2, y = (bitmap.height - edge) / 2;
-      const canvas = $('profileCropCanvas'), context = canvas.getContext('2d');
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, x, y, edge, edge, 0, 0, canvas.width, canvas.height);
-      if (typeof bitmap.close === 'function') bitmap.close();
+      profileCropper.load(bitmap);
       state.profilePhotoReady = true;
       $('profilePhotoMenu').classList.add('hidden');
       $('profileCamera').setAttribute('aria-expanded', 'false');
@@ -562,8 +643,9 @@
     } catch (e) { toast(e.message || 'Profile picture upload failed.'); }
     finally { button.disabled = false; }
   }
-  function cancelProfileCrop() {
+    function cancelProfileCrop() {
     state.profilePhotoReady = false;
+    profileCropper.release();
     $('profileCrop').classList.add('hidden');
     $('profilePhotoInput').value = '';
   }
@@ -830,7 +912,7 @@
     wrap.append(toggle, menu);
     return wrap;
   }
-  function messageActions(message, mine, kind) {
+    function messageActions(message, mine, kind) {
     const wrap = el('div', { class: 'message-actions' });
     const toggle = el('button', { class: 'message-menu-toggle', type: 'button', 'aria-label': 'Message actions', 'aria-expanded': 'false' }, [
       el('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' }, [el('path', { d: 'm4 6 4 4 4-4' })]),
@@ -849,18 +931,26 @@
       button.addEventListener('click', async () => { close(); await action(); });
       menu.append(button);
     };
-    if (mine && !message.deleted && Date.now() - message.createdAt <= 15 * 60 * 1000) {
-      addAction('Edit', async () => {
-        const text = prompt('Edit message', message.text);
-        if (text == null || !text.trim()) return;
-        try {
-          const result = await api(path, { method: 'PATCH', body: { text } });
-          applyMessageChange(result.message, kind);
-        } catch (e) { toast(e.message); }
-      });
-    }
-    const canDeleteEveryone = mine && !message.deleted && Date.now() - message.createdAt <= 60 * 60 * 1000;
+
+    // Main view: always built fresh (Edit + Delete)
+    const buildMainMenu = () => {
+      menu.replaceChildren();
+      if (mine && !message.deleted && Date.now() - message.createdAt <= 15 * 60 * 1000) {
+        addAction('Edit', async () => {
+          const text = prompt('Edit message', message.text);
+          if (text == null || !text.trim()) return;
+          try {
+            const result = await api(path, { method: 'PATCH', body: { text } });
+            applyMessageChange(result.message, kind);
+          } catch (e) { toast(e.message); }
+        });
+      }
+      addAction('Delete', showDeleteChoices);
+    };
+
+    // Delete view: Delete for me / Delete for everyone / Cancel
     const showDeleteChoices = () => {
+      const canDeleteEveryone = mine && !message.deleted && Date.now() - message.createdAt <= 60 * 60 * 1000;
       menu.replaceChildren();
       addAction('Delete for me', async () => {
         try {
@@ -879,14 +969,18 @@
           } catch (e) { toast(e.message); }
         });
       }
-      addAction('Cancel', async () => {});
+      addAction('Cancel', async () => { buildMainMenu(); }); // reset to Edit + Delete
       showMenu();
     };
-    addAction('Delete', showDeleteChoices);
+
+    buildMainMenu();
+
     toggle.addEventListener('click', (event) => {
       event.stopPropagation();
-      const open = menu.classList.toggle('hidden') === false;
-      toggle.setAttribute('aria-expanded', String(open));
+      const willOpen = menu.classList.contains('hidden');
+      if (willOpen) buildMainMenu(); // every time the menu opens, start from Edit + Delete
+      menu.classList.toggle('hidden', !willOpen);
+      toggle.setAttribute('aria-expanded', String(willOpen));
     });
     wrap.append(toggle, menu);
     return wrap;
@@ -1207,7 +1301,7 @@
     $('groupPhotoInput').value = '';
     state.groupPhotoReady = false;
   }
-  async function readGroupPhoto(file) {
+    async function readGroupPhoto(file) {
     if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast('Choose a JPEG, PNG, or WebP image.');
       return;
@@ -1215,12 +1309,7 @@
     try {
       const bitmap = typeof createImageBitmap === 'function'
         ? await createImageBitmap(file) : await loadProfileImage(file);
-      const edge = Math.min(bitmap.width, bitmap.height);
-      const x = (bitmap.width - edge) / 2, y = (bitmap.height - edge) / 2;
-      const canvas = $('groupPhotoCropCanvas'), context = canvas.getContext('2d');
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, x, y, edge, edge, 0, 0, canvas.width, canvas.height);
-      if (typeof bitmap.close === 'function') bitmap.close();
+      groupCropper.load(bitmap);
       state.groupPhotoReady = true;
       $('groupPhotoMenu').classList.add('hidden');
       $('groupPhotoCamera').setAttribute('aria-expanded', 'false');
@@ -1243,8 +1332,9 @@
     }
     throw new Error('This image could not be compressed below 150 KB.');
   }
-  function cancelGroupPhotoCrop() {
+    function cancelGroupPhotoCrop() {
     state.groupPhotoReady = false;
+    groupCropper.release();
     $('groupPhotoCrop').classList.add('hidden');
     $('groupPhotoCamera').classList.toggle('hidden', !state.groupPhotoAdmin);
     $('groupPhotoInput').value = '';
@@ -1412,14 +1502,63 @@
       const actions = event.target instanceof Element ? event.target.closest('.message-actions') : null;
       dismissMessageMenus(actions);
     }, true);
+
+    // Close header dropdown when clicking outside
+    document.addEventListener('click', (event) => {
+      const clickedInside = event.target instanceof Element
+        ? event.target.closest('.header-menu-wrap')
+        : null;
+
+      if (clickedInside) return;
+
+      document.querySelectorAll('.header-menu-wrap .header-menu:not(.hidden)')
+        .forEach((menu) => {
+          menu.classList.add('hidden');
+
+          const toggle = menu.parentElement.querySelector('button[aria-expanded]');
+          if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }, true);
+
+    // Close header dropdown on Escape
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
+
+      document.querySelectorAll('.header-menu-wrap .header-menu:not(.hidden)')
+        .forEach((menu) => {
+          menu.classList.add('hidden');
+
+          const toggle = menu.parentElement.querySelector('button[aria-expanded]');
+          if (toggle) {
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.focus();
+          }
+        });
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      
       const openMenu = document.querySelector('.message-actions .message-menu:not(.hidden)');
       if (openMenu) {
         const toggle = openMenu.parentElement.querySelector('.message-menu-toggle');
         dismissMessageMenus(null);
         if (toggle) toggle.focus();
       }
+    }, true);
+        // Close the profile / group photo menus when clicking outside them
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      [
+        { menu: 'profilePhotoMenu', button: 'profileCamera' },
+        { menu: 'groupPhotoMenu', button: 'groupPhotoCamera' },
+      ].forEach(({ menu, button }) => {
+        const m = $(menu), b = $(button);
+        if (!m || m.classList.contains('hidden')) return;
+        if (target && (m.contains(target) || (b && b.contains(target)))) return; // click inside the menu or on the camera button
+        m.classList.add('hidden');
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
     }, true);
     $('meName').textContent = state.me.fullName;
     $('meDept').textContent = state.me.department || state.me.email;
@@ -1429,6 +1568,8 @@
     $('attendanceAction').addEventListener('click', changeAttendance);
     await loadTodayAttendance();
     window.setInterval(loadTodayAttendance, 60000);
+    profileCropper = makeCropper($('profileCropCanvas'), $('profileCropZoom'));
+    groupCropper = makeCropper($('groupPhotoCropCanvas'), $('groupPhotoCropZoom'));
     $('openProfile').addEventListener('click', openProfile);
     $('openProfile').addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openProfile(); }
