@@ -1215,6 +1215,14 @@
             if (state.active && state.active.kind === 'group' && state.active.id === d.groupId) openGroupMembers();
           }).catch(handleErr);
         }
+      } else if (d.type === 'group_deleted') {
+        const deletedId = Number(d.groupId);
+        state.groups = state.groups.filter((g) => Number(g.id) !== deletedId);
+        const dialog = $('groupMembersDialog');
+        if (dialog.open && Number(state.memberDialogGroupId) === deletedId) dialog.close();
+        if (state.active && state.active.kind === 'group' && Number(state.active.id) === deletedId) closeChat();
+        renderList();
+        toast('This group was deleted by the administrator.');
       }
       else if (d.type === 'typing' && state.active && state.active.kind === 'direct' && state.active.id === d.conversationId && d.userId === state.active.other.id) updateOtherTyping(d.typing === true);
       else if (d.type === 'employee_unavailable') markUnavailable(d.userId);
@@ -1407,12 +1415,12 @@
       result.members.forEach((member) => {
         const content = [
           avatar(member, false, false),
-          el('span', { class: 'meta' }, [
+        el('span', { class: 'meta' }, [
             el('span', { class: 'name', text: member.fullName }),
-            el('span', { class: 'prev', text: member.role === 'admin' ? 'Admin' : 'Member' }),
+            el('span', { class: 'prev', text: member.globalRole === 'admin' ? 'Administrator' : member.role === 'admin' ? 'Admin' : 'Member' }),
           ]),
         ];
-        if (result.group.role === 'admin' && member.id !== state.me.id) {
+        if (result.group.role === 'admin' && member.id !== state.me.id && member.globalRole !== 'admin') {
           content.push(el('button', { class: 'btn danger sm', type: 'button', text: 'Remove', onclick: () => removeGroupMember(groupId, member.id) }));
         }
         list.append(el('li', {}, [el('div', { class: 'item' }, content)]));
@@ -1421,7 +1429,8 @@
       $('groupAddField').classList.toggle('hidden', !isAdmin);
       $('groupAddSelectField').classList.toggle('hidden', !isAdmin);
       $('addGroupMembers').classList.toggle('hidden', !isAdmin);
-      $('leaveGroup').classList.remove('hidden');
+      $('leaveGroup').classList.toggle('hidden', state.me.role === 'admin');
+      $('deleteGroup').classList.toggle('hidden', state.me.role !== 'admin');
       $('groupMemberSearch').value = '';
       $('groupMemberSelect').replaceChildren();
       if (isAdmin) {
@@ -1466,6 +1475,25 @@
       renderList();
     } catch (e) {
       $('groupMembersError').textContent = e.message || 'Could not leave the group.';
+      $('groupMembersError').classList.remove('hidden');
+    }
+  }
+  function openDeleteGroup() {
+    if (!state.active || state.active.kind !== 'group' || state.me.role !== 'admin') return;
+    $('deleteGroupDialog').showModal();
+  }
+  async function deleteGroup() {
+    if (!state.active || state.active.kind !== 'group') return;
+    const groupId = state.active.id;
+    try {
+      await api('/groups/' + groupId, { method: 'DELETE' });
+      $('deleteGroupDialog').close();
+      $('groupMembersDialog').close();
+      state.groups = state.groups.filter((g) => g.id !== groupId);
+      closeChat();
+      toast('Group deleted.');
+    } catch (e) {
+      $('groupMembersError').textContent = e.message || 'Could not delete the group.';
       $('groupMembersError').classList.remove('hidden');
     }
   }
@@ -1616,6 +1644,9 @@
     $('closeGroupMembers').addEventListener('click', () => $('groupMembersDialog').close());
     $('addGroupMembers').addEventListener('click', addGroupMembers);
     $('leaveGroup').addEventListener('click', leaveGroup);
+    $('deleteGroup').addEventListener('click', openDeleteGroup);
+    $('cancelDeleteGroup').addEventListener('click', () => $('deleteGroupDialog').close());
+    $('confirmDeleteGroup').addEventListener('click', deleteGroup);
     $('q').addEventListener('input', debounce(() => { if (state.tab === 'people') refreshSide(); else renderList(); }, 200));
     $('logout').addEventListener('click', async () => { try { await api('/auth/logout', { method: 'POST', body: {} }); } finally { location.replace('/login.html'); } });
     document.addEventListener('visibilitychange', () => {

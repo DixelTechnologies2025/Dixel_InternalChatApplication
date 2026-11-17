@@ -5,6 +5,7 @@ const cfg = require('../src/config');
 const db = require('../src/db');
 const { hashPassword } = require('../src/passwords');
 const S = require('../src/security');
+const { ensureAdminsInAllGroups } = require('../src/group-admins');
 
 (async () => {
   await db.initialize();
@@ -32,5 +33,7 @@ const S = require('../src/security');
     await db.prepare("INSERT INTO users (full_name,email,password_hash,role,status,email_verified_at,created_at) VALUES (?,?,?,'admin','active',?,?)").run(name, email, hash, now, now);
     console.log(`Created administrator ${email}.`);
   }
+  const repaired = await ensureAdminsInAllGroups();
+  console.log(`Repaired ${repaired.length} administrator group membership(s).`);
   await db.audit(null, 'admin_created_via_cli', email);
 })();

@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const rt = require('../realtime');
 const { markGroupRead } = require('../message-status');
+const { ensureAdminsInAllGroups } = require('../group-admins');
 
 const router = express.Router();
 const MAX_LEN = 4000;
@@ -68,7 +69,7 @@ function parseIds(value) {
 }
 
 async function groupMemberRows(groupId) {
-  return db.prepare(`SELECT u.id, u.full_name AS fullName, gm.role,
+  return db.prepare(`SELECT u.id, u.full_name AS fullName, gm.role, u.role AS globalRole,
       (SELECT updated_at FROM user_avatars WHERE user_id = u.id) AS avatarVersion
     FROM group_members gm JOIN users u ON u.id = gm.user_id
     WHERE gm.group_id = ? AND u.status = 'active'
@@ -86,7 +87,7 @@ router.post('/groups', async (req, res) => {
   }
   if (!memberIds.length) return res.status(400).json({ message: 'Choose at least one employee for the group.' });
   const placeholders = memberIds.map(() => '?').join(',');
-  const available = await db.prepare(`SELECT id FROM users WHERE status = 'active' AND id IN (${placeholders})`).all(...memberIds);
+  const available = await db.prepare(`SELECT id FROM users WHERE status = 'active' AND role != 'admin' AND id IN (${placeholders})`).all(...memberIds);
   if (available.length !== memberIds.length) return res.status(400).json({ message: 'One or more selected employees are not available.' });
 
   const now = Date.now();
@@ -100,8 +101,13 @@ router.post('/groups', async (req, res) => {
     await tx.audit(req.user.id, 'group_created', groupId, req.ip);
     return groupId;
   });
-  const group = { id: groupId, name, createdAt: now, memberCount: memberIds.length + 1, avatarVersion: null };
+  const repaired = await ensureAdminsInAllGroups();
+  const memberCount = (await db.prepare('SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?').get(groupId)).n;
+  const group = { id: groupId, name, createdAt: now, memberCount, avatarVersion: null };
   await rt.sendToGroupMembers(groupId, { type: 'group_created', group });
+  if (repaired.some((item) => item.groupId === groupId)) {
+    await rt.sendToGroupMembers(groupId, { type: 'group_member_added', groupId });
+  }
   res.status(201).json({ group });
 });
 
@@ -415,7 +421,7 @@ router.post('/groups/:id/members', async (req, res) => {
     return res.status(400).json({ message: 'Choose valid employees to add to the group.' });
   }
   const placeholders = memberIds.map(() => '?').join(',');
-  const available = await db.prepare(`SELECT id FROM users WHERE status = 'active' AND id IN (${placeholders})`).all(...memberIds);
+  const available = await db.prepare(`SELECT id FROM users WHERE status = 'active' AND role != 'admin' AND id IN (${placeholders})`).all(...memberIds);
   if (available.length !== memberIds.length) return res.status(400).json({ message: 'One or more selected employees are not available.' });
   const now = Date.now();
   const added = await db.transaction(async (tx) => {
@@ -443,6 +449,10 @@ router.delete('/groups/:id/members/:userId', async (req, res) => {
   }
   const target = await db.prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
   if (!target) return res.status(404).json({ message: 'Group member not found.' });
+  const globalTarget = await db.prepare("SELECT role FROM users WHERE id = ? AND status = 'active'").get(userId);
+  if (globalTarget && globalTarget.role === 'admin') {
+    return res.status(403).json({ message: 'The administrator cannot be removed from a group' });
+  }
   await db.transaction(async (tx) => {
     if (target.role === 'admin' && userId === req.user.id) {
       const activeAdmins = (await tx.prepare(`SELECT COUNT(*) AS n FROM group_members gm JOIN users u ON u.id = gm.user_id
@@ -465,6 +475,29 @@ router.delete('/groups/:id/members/:userId', async (req, res) => {
   const event = { type: 'group_member_removed', groupId, userId, removedUserId: userId };
   await rt.sendToGroupMembers(groupId, event);
   rt.sendToUser(userId, event);
+  res.json({ ok: true });
+});
+
+router.delete('/groups/:id', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only the administrator can delete a group.' });
+  const groupId = Number(req.params.id);
+  if (!Number.isSafeInteger(groupId) || groupId < 1) return res.status(400).json({ message: 'Invalid group.' });
+  const group = await db.prepare('SELECT id, name FROM groups WHERE id = ?').get(groupId);
+  if (!group) return res.status(404).json({ message: 'Group not found.' });
+  const members = await db.prepare('SELECT user_id FROM group_members WHERE group_id = ?').all(groupId);
+  const memberIds = members.map((member) => member.user_id);
+  await Promise.all(memberIds.map((userId) => rt.sendToUser(userId, { type: 'group_deleted', groupId })));
+  await db.transaction(async (tx) => {
+    await tx.prepare('DELETE FROM group_message_receipts WHERE message_id IN (SELECT id FROM group_messages WHERE group_id = ?)').run(groupId);
+    await tx.prepare('DELETE FROM group_message_hides WHERE message_id IN (SELECT id FROM group_messages WHERE group_id = ?)').run(groupId);
+    await tx.prepare('DELETE FROM group_clears WHERE group_id = ?').run(groupId);
+    await tx.prepare('DELETE FROM group_reads WHERE group_id = ?').run(groupId);
+    await tx.prepare('DELETE FROM group_messages WHERE group_id = ?').run(groupId);
+    await tx.prepare('DELETE FROM group_avatars WHERE group_id = ?').run(groupId);
+    await tx.prepare('DELETE FROM group_members WHERE group_id = ?').run(groupId);
+    await tx.prepare('DELETE FROM groups WHERE id = ?').run(groupId);
+    await tx.audit(req.user.id, 'group_deleted', JSON.stringify({ groupId, name: group.name, memberCount: memberIds.length }), req.ip);
+  });
   res.json({ ok: true });
 });
 

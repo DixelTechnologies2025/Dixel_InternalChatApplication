@@ -39,7 +39,7 @@ router.get('/employees', async (req, res) => {
   const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
   const rows = await db.prepare(`SELECT u.*,
     (SELECT updated_at FROM user_avatars WHERE user_id = u.id) AS avatar_version
-    FROM users u WHERE status = 'active' AND id != ?
+    FROM users u WHERE status = 'active' AND role != 'admin' AND id != ?
     AND (? = '' OR lower(full_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(department,'')) LIKE ? ESCAPE '\\')
     ORDER BY full_name COLLATE NOCASE LIMIT 200`).all(req.user.id, q, like, like);
   res.json({ employees: rows.map((user) => userCard(user)) });

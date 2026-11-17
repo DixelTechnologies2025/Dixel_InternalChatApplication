@@ -82,10 +82,18 @@
     <div class="field" id="groupAddSelectField"><label for="groupMemberSelect">Employees</label><select id="groupMemberSelect" multiple size="5"></select></div>
     <div class="side-actions">
       <button class="btn danger" id="leaveGroup" type="button">Leave group</button>
+      <button class="btn danger hidden" id="deleteGroup" type="button">Delete group</button>
       <button class="btn ghost" id="closeGroupMembers" type="button">Close</button>
       <button class="btn" id="addGroupMembers" type="button">Add selected</button>
     </div>
   </div>
+</dialog>
+<dialog id="deleteGroupDialog">
+  <form class="auth-card" method="dialog">
+    <h1>Delete group?</h1>
+    <p class="sub">Delete this group for everyone? All messages and the group photo will be permanently deleted. This cannot be undone.</p>
+    <div class="side-actions"><button class="btn ghost" id="cancelDeleteGroup" type="button">Cancel</button><button class="btn danger" id="confirmDeleteGroup" type="button">Delete group</button></div>
+  </form>
 </dialog>
 <dialog id="profileDialog" class="profile-dialog" aria-label="Profile">
   <div class="profile-panel">

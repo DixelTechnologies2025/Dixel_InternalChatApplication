@@ -8,6 +8,7 @@ const db = require('./db');
 const S = require('./security');
 const rt = require('./realtime');
 const { smtpConfigured } = require('./mailer');
+const { ensureAdminsInAllGroups } = require('./group-admins');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -89,6 +90,10 @@ async function housekeeping() {
 async function start() {
   await db.initialize();
   await db.seedAdmin();
+  const repaired = await ensureAdminsInAllGroups();
+  for (const { groupId } of repaired) {
+    await rt.sendToGroupMembers(groupId, { type: 'group_member_added', groupId });
+  }
   await housekeeping();
   const { n: admins } = await db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get();
   setInterval(() => {

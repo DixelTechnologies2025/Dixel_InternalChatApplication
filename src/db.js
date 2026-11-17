@@ -182,6 +182,8 @@ db.seedAdmin = async function seedAdmin() {
     return false;
   }
   console.log(`[setup] Created administrator ${email}.`);
+  const { ensureAdminsInAllGroups } = require('./group-admins');
+  await ensureAdminsInAllGroups();
   return true;
 };
 

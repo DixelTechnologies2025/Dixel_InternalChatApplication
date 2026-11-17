@@ -11,7 +11,7 @@ const EMAIL_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
 function emailProblem(email) {
   if (!EMAIL_RE.test(email) || email.length > 254) return 'Enter a valid email address.';
   if (email.split('@')[1] !== cfg.companyDomain) {
-    return `Only official @${cfg.companyDomain} email addresses can be used.`;
+    return 'Only official company email can be used.';
   }
   return null;
 }
