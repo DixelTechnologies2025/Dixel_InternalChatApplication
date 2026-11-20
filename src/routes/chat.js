@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const rt = require('../realtime');
+const { isOneEmoji, loadReactions, attachReactions } = require('../reactions');
 
 const router = express.Router();
 const MAX_LEN = 4000;
@@ -13,8 +14,20 @@ const userCard = (u, self = false) => ({
 const msgOut = (m) => ({
   id: m.id, conversationId: m.conversation_id, senderId: m.sender_id, text: m.body,
   createdAt: m.created_at, deliveredAt: m.delivered_at, readAt: m.read_at,
-  editedAt: m.edited_at, deleted: !!m.deleted_at,
+  editedAt: m.edited_at, deleted: !!m.deleted_at, reactions: [],
 });
+
+async function enrichMessage(message) {
+  return attachReactions([message], await loadReactions([message.id], 'direct'))[0];
+}
+
+async function reactionRows(messageId) {
+  return (await loadReactions([messageId], 'direct')).get(Number(messageId)) || [];
+}
+
+function reactionEvent(conversation, userId, messageId, reactions) {
+  return { type: 'message_reaction', scope: 'direct', conversationId: conversation.id, messageId, reactions };
+}
 
 // Returns the conversation only if the signed-in user is a participant. Anything else looks like "not found".
 async function getConversation(id, userId) {
@@ -78,6 +91,9 @@ router.get('/conversations', async (req, res) => {
     out.push({ id: c.id, other: userCard(other), lastMessage: msgOut(last), unread, self: false });
   }
   out.sort((a, b) => (b.lastMessage ? b.lastMessage.id : 0) - (a.lastMessage ? a.lastMessage.id : 0));
+  const lastMessages = out.filter((conversation) => conversation.lastMessage).map((conversation) => conversation.lastMessage);
+  const reactions = await loadReactions(lastMessages.map((message) => message.id), 'direct');
+  lastMessages.forEach((message) => { message.reactions = reactions.get(Number(message.id)) || []; });
   res.json({ conversations: out });
 });
 
@@ -108,7 +124,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
     ORDER BY m.id DESC LIMIT ?`).all(req.user.id, req.user.id, ctx.conv.id, before, limit + 1);
   const hasMore = rows.length > limit;
   const selected = rows.slice(0, limit).reverse();
-  const page = selected.map(msgOut);
+  const page = attachReactions(selected.map(msgOut), await loadReactions(selected.map((message) => message.id), 'direct'));
   const otherRead = ctx.self ? null :
     await db.prepare('SELECT last_read_message_id AS r FROM conversation_reads WHERE conversation_id = ? AND user_id = ?').get(ctx.conv.id, ctx.other.id);
   const myRead = await db.prepare('SELECT last_read_message_id AS r FROM conversation_reads WHERE conversation_id = ? AND user_id = ?').get(ctx.conv.id, req.user.id);
@@ -171,7 +187,7 @@ router.patch('/conversations/:id/messages/:messageId', async (req, res) => {
     WHERE id = ? AND sender_id = ? AND deleted_at IS NULL AND created_at >= ?`)
     .run(text, editedAt, messageId, req.user.id, editedAt - 15 * 60 * 1000);
   if (!updatedCount.changes) return res.status(409).json({ message: 'Messages can only be edited within 15 minutes.' });
-  const updated = msgOut(await db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId));
+  const updated = await enrichMessage(msgOut(await db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId)));
   const event = { type: 'message_edited', scope: 'direct', message: updated };
   sendConversationEvent(conversation, req.user.id, event);
   res.json({ message: updated });
@@ -203,14 +219,61 @@ router.post('/conversations/:id/messages/:messageId/delete', async (req, res) =>
   if (message.deleted_at) return res.status(409).json({ message: 'Message is already deleted.' });
   if (Date.now() - message.created_at > 60 * 60 * 1000) return res.status(409).json({ message: 'Messages can only be deleted for everyone within 1 hour.' });
   const deletedAt = Date.now();
-  const deletedCount = await db.prepare(`UPDATE messages SET body = 'This message was deleted', deleted_at = ?, edited_at = NULL
-    WHERE id = ? AND sender_id = ? AND deleted_at IS NULL AND created_at >= ?`)
-    .run(deletedAt, messageId, req.user.id, deletedAt - 60 * 60 * 1000);
+  const deletedCount = await db.transaction(async (tx) => {
+    const result = await tx.prepare(`UPDATE messages SET body = 'This message was deleted', deleted_at = ?, edited_at = NULL
+      WHERE id = ? AND sender_id = ? AND deleted_at IS NULL AND created_at >= ?`)
+      .run(deletedAt, messageId, req.user.id, deletedAt - 60 * 60 * 1000);
+    if (result.changes) await tx.prepare('DELETE FROM direct_message_reactions WHERE message_id = ?').run(messageId);
+    return result;
+  });
   if (!deletedCount.changes) return res.status(409).json({ message: 'Messages can only be deleted for everyone within 1 hour.' });
-  const updated = msgOut(await db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId));
+  const updated = await enrichMessage(msgOut(await db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId)));
   const event = { type: 'message_deleted', scope: 'direct', message: updated };
   sendConversationEvent(conversation, req.user.id, event);
   res.json({ ok: true, message: updated });
+});
+
+router.put('/conversations/:id/messages/:messageId/reaction', async (req, res) => {
+  const conversation = await db.prepare('SELECT * FROM conversations WHERE id = ?').get(Number(req.params.id));
+  const messageId = Number(req.params.messageId);
+  if (!conversation) return res.status(404).json({ message: 'Message not found.' });
+  if (conversation.user_a !== req.user.id && conversation.user_b !== req.user.id) {
+    return res.status(403).json({ message: 'You are not a participant in this conversation.' });
+  }
+  if (!Number.isSafeInteger(messageId) || messageId < 1) return res.status(400).json({ message: 'Invalid message ID.' });
+  const message = await db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, conversation.id);
+  if (!message) return res.status(404).json({ message: 'Message not found.' });
+  if (message.deleted_at) return res.status(409).json({ message: 'Deleted messages cannot be reacted to.' });
+  const emoji = (req.body || {}).emoji;
+  if (!isOneEmoji(emoji)) return res.status(400).json({ message: 'Choose exactly one emoji.' });
+  const existing = await db.prepare('SELECT emoji FROM direct_message_reactions WHERE message_id = ? AND user_id = ?').get(messageId, req.user.id);
+  if (existing && existing.emoji === emoji) {
+    await db.prepare('DELETE FROM direct_message_reactions WHERE message_id = ? AND user_id = ?').run(messageId, req.user.id);
+  } else {
+    await db.prepare(`INSERT INTO direct_message_reactions (message_id, user_id, emoji, created_at) VALUES (?,?,?,?)
+      ON CONFLICT(message_id, user_id) DO UPDATE SET emoji = excluded.emoji, created_at = excluded.created_at`)
+      .run(messageId, req.user.id, emoji, Date.now());
+  }
+  const reactions = await reactionRows(messageId);
+  sendConversationEvent(conversation, req.user.id, reactionEvent(conversation, req.user.id, messageId, reactions));
+  res.json({ reactions });
+});
+
+router.delete('/conversations/:id/messages/:messageId/reaction', async (req, res) => {
+  const conversation = await db.prepare('SELECT * FROM conversations WHERE id = ?').get(Number(req.params.id));
+  const messageId = Number(req.params.messageId);
+  if (!conversation) return res.status(404).json({ message: 'Message not found.' });
+  if (conversation.user_a !== req.user.id && conversation.user_b !== req.user.id) {
+    return res.status(403).json({ message: 'You are not a participant in this conversation.' });
+  }
+  if (!Number.isSafeInteger(messageId) || messageId < 1) return res.status(400).json({ message: 'Invalid message ID.' });
+  const message = await db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, conversation.id);
+  if (!message) return res.status(404).json({ message: 'Message not found.' });
+  if (message.deleted_at) return res.status(409).json({ message: 'Deleted messages cannot be reacted to.' });
+  await db.prepare('DELETE FROM direct_message_reactions WHERE message_id = ? AND user_id = ?').run(messageId, req.user.id);
+  const reactions = await reactionRows(messageId);
+  sendConversationEvent(conversation, req.user.id, reactionEvent(conversation, req.user.id, messageId, reactions));
+  res.json({ reactions });
 });
 
 router.post('/conversations/:id/clear', async (req, res) => {

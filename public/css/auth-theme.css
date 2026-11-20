@@ -1,0 +1,210 @@
+body[data-page="login"],
+body[data-page="signup"],
+body[data-page="forgot"] {
+  --auth-cobalt: #1E4DB6;
+  --auth-cobalt-dark: #183F96;
+  --auth-panel-start: #1E4DB6;
+  --auth-panel-end: #183F96;
+  --auth-page-start: #DCEBFE;
+  --auth-page-end: #E6E9EF;
+  --auth-navy: #0F2149;
+  --auth-text: #263B5B;
+  --auth-muted: #38506F;
+  --auth-input: #E6EEFC;
+  --auth-input-border: #B5C5DD;
+  --auth-divider: #D3DDEA;
+  --auth-card-border: #B2BCCC;
+  --auth-focus: rgba(30, 77, 182, .28);
+  --auth-shadow: 0 16px 36px rgba(15, 33, 73, .18);
+}
+
+body[data-page="login"] .auth,
+body[data-page="signup"] .auth,
+body[data-page="forgot"] .auth {
+  background: var(--auth-page-end);
+}
+
+body[data-page="login"] .auth-side,
+body[data-page="signup"] .auth-side,
+body[data-page="forgot"] .auth-side {
+  position: relative;
+  overflow: hidden;
+  color: #FFFFFF;
+  background-color: var(--auth-panel-end);
+  background-image:
+    radial-gradient(circle at 95% 29%, transparent 0 128px, rgba(139, 183, 255, .32) 129px 130px, rgba(77, 132, 224, .12) 131px 164px, transparent 165px),
+    radial-gradient(circle at 1% 80%, transparent 0 76px, rgba(139, 183, 255, .30) 77px 78px, transparent 79px),
+    linear-gradient(135deg, var(--auth-panel-start), var(--auth-panel-end));
+}
+
+body[data-page="login"] .auth-side > *,
+body[data-page="signup"] .auth-side > *,
+body[data-page="forgot"] .auth-side > * {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-page="login"] .auth-side h2,
+body[data-page="signup"] .auth-side h2,
+body[data-page="forgot"] .auth-side h2,
+body[data-page="login"] .auth-side p,
+body[data-page="signup"] .auth-side p,
+body[data-page="forgot"] .auth-side p,
+body[data-page="login"] .auth-side .brand-name,
+body[data-page="signup"] .auth-side .brand-name,
+body[data-page="forgot"] .auth-side .brand-name,
+body[data-page="login"] .trust-list li,
+body[data-page="signup"] .trust-list li,
+body[data-page="forgot"] .trust-list li,
+body[data-page="login"] .auth-side > small,
+body[data-page="signup"] .auth-side > small,
+body[data-page="forgot"] .auth-side > small {
+  color: #FFFFFF;
+}
+
+body[data-page="login"] .trust-list li svg,
+body[data-page="signup"] .trust-list li svg,
+body[data-page="forgot"] .trust-list li svg {
+  border-color: #79A9F1;
+  stroke: #A8C9FF;
+}
+
+body[data-page="login"] .auth-main,
+body[data-page="signup"] .auth-main,
+body[data-page="forgot"] .auth-main {
+  background: linear-gradient(135deg, var(--auth-page-start), var(--auth-page-end));
+}
+
+body[data-page="login"] .auth-card,
+body[data-page="signup"] .auth-card,
+body[data-page="forgot"] .auth-card {
+  border-color: var(--auth-card-border);
+  background: #FFFFFF;
+  box-shadow: var(--auth-shadow);
+}
+
+body[data-page="login"] .auth-card h1,
+body[data-page="signup"] .auth-card h1,
+body[data-page="forgot"] .auth-card h1 {
+  color: var(--auth-navy);
+}
+
+body[data-page="login"] .auth-card .sub,
+body[data-page="signup"] .auth-card .sub,
+body[data-page="forgot"] .auth-card .sub,
+body[data-page="login"] .field label,
+body[data-page="signup"] .field label,
+body[data-page="forgot"] .field label,
+body[data-page="login"] .field .opt,
+body[data-page="signup"] .field .opt,
+body[data-page="forgot"] .field .opt,
+body[data-page="login"] .hint,
+body[data-page="signup"] .hint,
+body[data-page="forgot"] .hint,
+body[data-page="login"] .links,
+body[data-page="signup"] .links,
+body[data-page="forgot"] .links {
+  color: var(--auth-text);
+}
+
+body[data-page="login"] .field input,
+body[data-page="signup"] .field input,
+body[data-page="forgot"] .field input,
+body[data-page="login"] .field select,
+body[data-page="signup"] .field select,
+body[data-page="forgot"] .field select {
+  border-color: var(--auth-input-border);
+  background: var(--auth-input);
+}
+
+body[data-page="login"] .field input::placeholder,
+body[data-page="signup"] .field input::placeholder,
+body[data-page="forgot"] .field input::placeholder {
+  color: #536783;
+  opacity: 1;
+}
+
+body[data-page="login"] .field input:focus,
+body[data-page="signup"] .field input:focus,
+body[data-page="forgot"] .field input:focus,
+body[data-page="login"] .field select:focus,
+body[data-page="signup"] .field select:focus,
+body[data-page="forgot"] .field select:focus {
+  border-color: var(--auth-cobalt);
+  outline-color: var(--auth-focus);
+}
+
+body[data-page="login"] .password-toggle,
+body[data-page="signup"] .password-toggle,
+body[data-page="forgot"] .password-toggle {
+  color: var(--auth-muted);
+}
+
+body[data-page="login"] .password-toggle:hover,
+body[data-page="signup"] .password-toggle:hover,
+body[data-page="forgot"] .password-toggle:hover {
+  color: var(--auth-cobalt);
+  background: #E6EEFC;
+}
+
+body[data-page="login"] .btn,
+body[data-page="signup"] .btn,
+body[data-page="forgot"] .btn {
+  border-color: var(--auth-cobalt);
+  background: var(--auth-cobalt);
+}
+
+body[data-page="login"] .btn:hover,
+body[data-page="signup"] .btn:hover,
+body[data-page="forgot"] .btn:hover {
+  border-color: var(--auth-cobalt-dark);
+  background: var(--auth-cobalt-dark);
+}
+
+body[data-page="login"] .links,
+body[data-page="signup"] .links,
+body[data-page="forgot"] .links {
+  position: relative;
+}
+
+body[data-page="login"] .links::before,
+body[data-page="signup"] .links::before,
+body[data-page="forgot"] .links::before {
+  position: absolute;
+  top: -12px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--auth-divider);
+  content: "";
+}
+
+body[data-page="login"] .links a,
+body[data-page="signup"] .links a,
+body[data-page="forgot"] .links a {
+  color: var(--auth-cobalt);
+}
+
+body[data-page="login"] .alert.error,
+body[data-page="signup"] .alert.error,
+body[data-page="forgot"] .alert.error {
+  border-color: #E7B6B3;
+  color: #7E211D;
+  background: #FBECEB;
+}
+
+body[data-page="login"] .alert.ok,
+body[data-page="signup"] .alert.ok,
+body[data-page="forgot"] .alert.ok {
+  border-color: #B6D9C2;
+  color: #14532D;
+  background: #E7F4EB;
+}
+
+body[data-page="login"] .alert.info,
+body[data-page="signup"] .alert.info,
+body[data-page="forgot"] .alert.info {
+  border-color: #B8CCE8;
+  color: #173C70;
+  background: #EAF1FC;
+}

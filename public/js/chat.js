@@ -10,6 +10,16 @@
     attendance: null, attendanceBusy: false,
   };
 
+  let emojiPicker = null;
+  let emojiPickerTrigger = null;
+  let reactionBar = null;
+  let reactionPopover = null;
+  let pickerTarget = null;
+  let pickerPick = null;
+  let pickerCategory = 'Recent';
+  let pickerQuery = '';
+  const recentEmojiKey = 'dixel-recent-emojis';
+
   // ---------- helpers ----------
   const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   function dayLabel(t) {
@@ -22,6 +32,176 @@
   function listTime(t) {
     const d = new Date(t);
     return d.toDateString() === new Date().toDateString() ? fmtTime(t) : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  }
+  function emojiCategories() { return window.EMOJI_DATA || []; }
+  function readRecentEmojis() {
+    try {
+      const value = JSON.parse(localStorage.getItem(recentEmojiKey) || '[]');
+      return Array.isArray(value) ? value.filter((emoji) => typeof emoji === 'string').slice(0, 24) : [];
+    } catch (e) { return []; }
+  }
+  function rememberEmoji(emoji) {
+    try {
+      const recent = [emoji, ...readRecentEmojis().filter((item) => item !== emoji)].slice(0, 24);
+      localStorage.setItem(recentEmojiKey, JSON.stringify(recent));
+    } catch (e) { /* private browsing/storage-disabled is harmless */ }
+  }
+  function closeEmojiUi() {
+    if (emojiPicker) emojiPicker.remove();
+    if (reactionBar) reactionBar.remove();
+    if (reactionPopover) reactionPopover.remove();
+    emojiPicker = null; emojiPickerTrigger = null; reactionBar = null; reactionPopover = null;
+    pickerTarget = null; pickerPick = null;
+  }
+  function floatingPosition(node, anchor, mode) {
+    const rect = anchor.getBoundingClientRect();
+    const width = mode === 'picker' ? Math.min(350, window.innerWidth - 16) : node.offsetWidth;
+    const height = node.offsetHeight;
+    let left = mode === 'composer' ? rect.left : rect.right + 8;
+    let top = mode === 'composer' ? rect.top - height - 8 : rect.bottom + 8;
+    if (mode !== 'composer' && left + width > window.innerWidth - 8) left = rect.left - width - 8;
+    if (top + height > window.innerHeight - 8) top = rect.top - height - 8;
+    if (top < 8) top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
+    node.style.left = Math.max(8, Math.min(left, window.innerWidth - width - 8)) + 'px';
+    node.style.top = Math.max(8, top) + 'px';
+  }
+  function pickerItems() {
+    const all = emojiCategories().flatMap((group) => group.items.map(([emoji, name, keywords]) => ({ emoji, name, keywords, category: group.category })));
+    if (pickerCategory === 'Recent') {
+      const recent = readRecentEmojis();
+      return recent.map((emoji) => all.find((item) => item.emoji === emoji) || { emoji, name: emoji, keywords: '', category: 'Recent' });
+    }
+    const group = emojiCategories().find((item) => item.category === pickerCategory);
+    return group ? group.items.map(([emoji, name, keywords]) => ({ emoji, name, keywords, category: group.category })) : all;
+  }
+  function renderPickerGrid() {
+    if (!emojiPicker) return;
+    const grid = emojiPicker.querySelector('.emoji-grid');
+    const query = pickerQuery.trim().toLowerCase();
+    const items = pickerItems().filter((item) => !query || (item.name + ' ' + item.keywords).toLowerCase().includes(query));
+    grid.replaceChildren();
+    if (!items.length) { grid.append(el('div', { class: 'emoji-empty', text: 'No emoji found' })); return; }
+    items.forEach((item) => {
+      const button = el('button', { class: 'emoji-item', type: 'button', text: item.emoji, 'aria-label': item.name, title: item.name });
+      button.addEventListener('click', () => {
+        rememberEmoji(item.emoji);
+        if (pickerPick) pickerPick(item.emoji);
+        else if (pickerTarget) {
+          const start = pickerTarget.selectionStart == null ? pickerTarget.value.length : pickerTarget.selectionStart;
+          const end = pickerTarget.selectionEnd == null ? start : pickerTarget.selectionEnd;
+          const next = pickerTarget.value.slice(0, start) + item.emoji + pickerTarget.value.slice(end);
+          if (next.length <= 4000) {
+            pickerTarget.value = next;
+            const caret = start + item.emoji.length;
+            pickerTarget.setSelectionRange(caret, caret);
+            pickerTarget.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+      });
+      grid.append(button);
+    });
+  }
+  function openEmojiPicker(trigger, anchor, target, onPick) {
+    if (emojiPicker && emojiPickerTrigger === trigger) { closeEmojiUi(); return; }
+    closeEmojiUi();
+    emojiPickerTrigger = trigger; pickerTarget = target; pickerPick = onPick || null; pickerCategory = 'Recent'; pickerQuery = '';
+    emojiPicker = el('div', { class: 'emoji-picker', role: 'dialog', 'aria-label': 'Emoji picker' });
+    const tabs = el('div', { class: 'emoji-tabs' });
+    ['Recent', ...emojiCategories().map((group) => group.category)].forEach((category) => {
+      const tab = el('button', { class: 'emoji-tab' + (category === pickerCategory ? ' active' : ''), type: 'button', text: category, title: category });
+      tab.addEventListener('click', () => {
+        pickerCategory = category;
+        tabs.querySelectorAll('.emoji-tab').forEach((item) => item.classList.toggle('active', item === tab));
+        renderPickerGrid();
+      });
+      tabs.append(tab);
+    });
+    const search = el('input', { class: 'emoji-search', type: 'search', placeholder: 'Search emoji', 'aria-label': 'Search emoji' });
+    search.addEventListener('input', () => { pickerQuery = search.value; renderPickerGrid(); });
+    emojiPicker.append(tabs, search, el('div', { class: 'emoji-grid' }));
+    emojiPicker.addEventListener('click', (event) => event.stopPropagation());
+    document.body.append(emojiPicker);
+    renderPickerGrid();
+    floatingPosition(emojiPicker, anchor, target ? 'composer' : 'picker');
+  }
+  function composerEmojiButton(textarea) {
+    const button = el('button', { class: 'emoji-trigger', type: 'button', 'aria-label': 'Emoji', 'aria-haspopup': 'dialog', text: '☺' });
+    button.addEventListener('click', (event) => { event.stopPropagation(); openEmojiPicker(button, button, textarea); });
+    return button;
+  }
+  function reactionPath(message) {
+    return state.active.kind === 'group'
+      ? '/groups/' + state.active.id + '/messages/' + message.id + '/reaction'
+      : '/conversations/' + state.active.id + '/messages/' + message.id + '/reaction';
+  }
+  function reactionCounts(message) {
+    const counts = new Map();
+    (message.reactions || []).forEach((reaction) => {
+      const current = counts.get(reaction.emoji) || { emoji: reaction.emoji, count: 0, users: [] };
+      current.count += 1; current.users.push(reaction); counts.set(reaction.emoji, current);
+    });
+    return [...counts.values()];
+  }
+  function updateReactionDom(message) {
+    const bubble = document.querySelector('.bub[data-message-id="' + message.id + '"]');
+    if (!bubble) return;
+    bubble.querySelector('.reaction-chips')?.remove();
+    const counts = reactionCounts(message);
+    bubble.classList.toggle('has-reactions', counts.length > 0);
+    if (!counts.length) return;
+    const chips = el('div', { class: 'reaction-chips' });
+    counts.forEach((item) => {
+      const chip = el('button', { class: 'reaction-chip', type: 'button', text: item.emoji + (item.count > 1 ? ' ' + item.count : ''), 'aria-label': item.emoji + ' reaction' });
+      chip.addEventListener('click', (event) => { event.stopPropagation(); openReactionPopover(message, chip); });
+      chips.append(chip);
+    });
+    bubble.append(chips);
+  }
+  function openReactionPopover(message, anchor) {
+    closeEmojiUi();
+    reactionPopover = el('div', { class: 'reaction-popover', role: 'dialog', 'aria-label': 'Reaction details' });
+    (message.reactions || []).forEach((reaction) => {
+      const entry = el('button', { class: 'reaction-entry', type: 'button', text: reaction.fullName + ' ' + reaction.emoji });
+      if (Number(reaction.userId) === Number(state.me.id)) entry.title = 'Remove your reaction';
+      entry.addEventListener('click', async () => {
+        if (Number(reaction.userId) !== Number(state.me.id)) return;
+        try { await updateReaction(message, null, true); } catch (e) { toast(e.message); }
+      });
+      reactionPopover.append(entry);
+    });
+    document.body.append(reactionPopover);
+    floatingPosition(reactionPopover, anchor, 'popover');
+  }
+  async function updateReaction(message, emoji, remove) {
+    const result = await api(reactionPath(message), { method: remove ? 'DELETE' : 'PUT', body: remove ? undefined : { emoji } });
+    message.reactions = result.reactions || [];
+    updateReactionDom(message);
+    closeEmojiUi();
+  }
+  function openReactionBar(message, bubble, trigger) {
+    closeEmojiUi();
+    reactionBar = el('div', { class: 'reaction-bar', role: 'toolbar', 'aria-label': 'Add reaction' });
+    ['👍', '❤️', '😂', '😮', '😢', '🙏'].forEach((emoji) => {
+      const button = el('button', { class: 'quick-reaction' + ((message.reactions || []).some((item) => Number(item.userId) === Number(state.me.id) && item.emoji === emoji) ? ' active' : ''), type: 'button', text: emoji, 'aria-label': emoji });
+      button.addEventListener('click', () => updateReaction(message, emoji, false).catch((e) => toast(e.message)));
+      reactionBar.append(button);
+    });
+    const more = el('button', { class: 'quick-reaction more', type: 'button', text: '+', 'aria-label': 'More reactions' });
+    more.addEventListener('click', (event) => { event.stopPropagation(); openEmojiPicker(more, bubble, null, (emoji) => updateReaction(message, emoji, false).catch((e) => toast(e.message))); });
+    reactionBar.append(more);
+    reactionBar.addEventListener('click', (event) => event.stopPropagation());
+    document.body.append(reactionBar);
+    floatingPosition(reactionBar, trigger, 'bar');
+  }
+  function reactionTrigger(message, bubble) {
+    const button = el('button', { class: 'reaction-trigger', type: 'button', text: '☺', 'aria-label': 'React to message' });
+    button.addEventListener('click', (event) => { event.stopPropagation(); openReactionBar(message, bubble, button); });
+    return button;
+  }
+  function closeFloatingOnOutside(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target && (target.closest('.emoji-picker, .reaction-bar, .reaction-popover, .emoji-trigger, .reaction-trigger, .reaction-chip'))) return;
+    closeEmojiUi();
   }
   function groupIcon(className) {
     const namespace = 'http://www.w3.org/2000/svg';
@@ -190,16 +370,16 @@
     button.className = 'btn sm attendance-button';
     button.disabled = state.attendanceBusy || !state.me;
     if (!row) {
-      button.textContent = 'Check in';
+      button.textContent = 'Check In';
       button.classList.add('check-in');
       summary.textContent = '';
     } else if (row.checkOutAt) {
-      button.textContent = 'Checked out';
+      button.textContent = 'Checked Out';
       button.classList.add('checked-out');
       button.disabled = true;
       summary.textContent = `In ${attendanceTime(row.checkInAt)} - Out ${attendanceTime(row.checkOutAt)} · ${attendanceDuration(row.checkInAt, row.checkOutAt)}`;
     } else {
-      button.textContent = 'Check out';
+      button.textContent = 'Check Out';
       button.classList.add('check-out');
       summary.textContent = `In: ${attendanceTime(row.checkInAt)}`;
     }
@@ -304,7 +484,7 @@
                 el('span', { class: 'time', text: listTime(last ? last.createdAt : g.createdAt) }),
               ]),
               el('div', { class: 'prev' }, [
-                el('span', { text: last ? ((mine ? 'You: ' : (last.senderName + ': ')) + last.text.replace(/\s+/g, ' ')) : (g.memberCount + ' members') }),
+                el('span', { text: last ? ((mine ? 'You: ' : (last.senderName + ': ')) + last.text.replace(/\s+/g, ' ')) : (g.memberCount + ' Members') }),
                 g.unread ? el('span', { class: 'badge', text: g.unread }) : document.createTextNode(''),
               ]),
             ]),
@@ -701,7 +881,7 @@
       el('img', { class: 'send-icon', src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M2.01 21 23 12 2.01 3 2 10l15 2-15 2z'/%3E%3C/svg%3E", alt: '' }),
       el('span', { class: 'send-label sr', text: 'Send' }),
     ]);
-    const composer = el('div', { class: 'composer' }, [ta, send]);
+    const composer = el('div', { class: 'composer' }, [composerEmojiButton(ta), ta, send]);
     view.append(head, unavailable, conn, msgs, composer);
     view.className = 'chatview';
     $('paneEmpty').classList.add('hidden');
@@ -719,6 +899,7 @@
       (o.department ? o.department + ' · ' : '') + (online ? 'Online' : o.lastSeenAt ? 'Last seen ' + dayLabel(o.lastSeenAt).toLowerCase() + ' ' + fmtTime(o.lastSeenAt) : 'Offline');
   }
   function closeChat() {
+    closeEmojiUi();
     stopTyping();
     clearTimeout(state.otherTypingTimer);
     state.otherTyping = false;
@@ -728,6 +909,7 @@
   }
   async function openChat(other, convId, self = false) {
     try {
+      closeEmojiUi();
       stopTyping();
       clearTimeout(state.otherTypingTimer);
       state.otherTyping = false;
@@ -751,7 +933,7 @@
       groupAvatar(group, 'sm'),
       el('div', { class: 't' }, [
         el('b', { text: group.name }),
-        el('span', { id: 'groupSubtitle', text: (group.members ? group.members.length : group.memberCount) + ' members' }),
+        el('span', { id: 'groupSubtitle', text: (group.members ? group.members.length : group.memberCount) + ' Members' }),
         el('span', { class: 'group-preview', id: 'groupPreview', text: groupMemberPreview(group.members) }),
       ]),
       el('button', { class: 'iconbtn', id: 'groupMembersButton', type: 'button', onclick: openGroupMembers }, ['Members']),
@@ -764,7 +946,7 @@
       el('img', { class: 'send-icon', src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M2.01 21 23 12 2.01 3 2 10l15 2-15 2z'/%3E%3C/svg%3E", alt: '' }),
       el('span', { class: 'send-label sr', text: 'Send' }),
     ]);
-    view.append(head, conn, msgs, el('div', { class: 'composer' }, [ta, send]));
+    view.append(head, conn, msgs, el('div', { class: 'composer' }, [composerEmojiButton(ta), ta, send]));
     view.className = 'chatview';
     $('paneEmpty').classList.add('hidden');
     ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); } });
@@ -773,6 +955,7 @@
   }
   async function openGroup(groupId) {
     try {
+      closeEmojiUi();
       stopTyping();
       clearTimeout(state.otherTypingTimer);
       state.otherTyping = false;
@@ -815,7 +998,7 @@
       listGroup.memberCount = r.group.members.length;
       listGroup.avatarVersion = r.group.avatarVersion;
     }
-    $('groupSubtitle').textContent = r.group.members.length + ' members';
+    $('groupSubtitle').textContent = r.group.members.length + ' Members';
     $('groupPreview').textContent = groupMemberPreview(r.group.members);
     const headerAvatar = document.querySelector('.pane-head .group-avatar');
     if (headerAvatar) updateGroupAvatar(headerAvatar, state.active.group);
@@ -878,7 +1061,11 @@
       content.push(document.createTextNode(m.text), ts);
       const bubble = el('div', { class: 'bub' + (mine ? ' me' : '') + (m.deleted ? ' deleted' : ''), 'data-message-id': m.id }, content);
       bubble.append(messageActions(m, mine, state.active.kind));
+      if (!m.deleted) {
+        bubble.append(reactionTrigger(m, bubble));
+      }
       box.append(bubble);
+      if (!m.deleted) updateReactionDom(m);
     });
     if (stick && state.firstUnreadId) {
       const firstUnread = box.querySelector('[data-message-id="' + state.firstUnreadId + '"]');
@@ -1048,6 +1235,16 @@
     }
     refreshSide();
   }
+  function applyMessageReaction(event) {
+    const activeMatches = state.active &&
+      ((event.scope === 'group' && state.active.kind === 'group' && state.active.id === event.groupId) ||
+       (event.scope === 'direct' && state.active.kind === 'direct' && state.active.id === event.conversationId));
+    if (!activeMatches) return;
+    const message = state.messages.find((item) => Number(item.id) === Number(event.messageId));
+    if (!message || message.deleted) return;
+    message.reactions = event.reactions || [];
+    updateReactionDom(message);
+  }
   function applyChatCleared(event) {
     if (event.userId !== state.me.id) return;
     const activeMatches = state.active &&
@@ -1063,6 +1260,7 @@
   async function sendMessage() {
     const ta = $('composerText'), btn = $('sendBtn');
     const text = ta.value.trim(); if (!text || !state.active) return;
+    closeEmojiUi();
     const active = state.active;
     stopTyping();
     btn.disabled = true;
@@ -1193,6 +1391,7 @@
       else if (d.type === 'message_status') applyMessageStatus(d);
       else if (d.type === 'message_edited') applyMessageChange(d.message, d.scope === 'group' ? 'group' : 'direct');
       else if (d.type === 'message_deleted') applyMessageChange(d.message, d.scope === 'group' ? 'group' : 'direct');
+      else if (d.type === 'message_reaction') applyMessageReaction(d);
       else if (d.type === 'message_hidden') applyMessageHidden(d);
       else if (d.type === 'chat_cleared') applyChatCleared(d);
       else if (d.type === 'group_created') {
@@ -1526,6 +1725,7 @@
         if (toggle) toggle.setAttribute('aria-expanded', 'false');
       });
     };
+    document.addEventListener('click', closeFloatingOnOutside, true);
     document.addEventListener('click', (event) => {
       const actions = event.target instanceof Element ? event.target.closest('.message-actions') : null;
       dismissMessageMenus(actions);

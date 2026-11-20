@@ -2,6 +2,7 @@ const { WebSocketServer } = require('ws');
 const db = require('./db');
 const { COOKIE, authFromToken } = require('./security');
 const { markDirectDelivered, markGroupDelivered } = require('./message-status');
+const { loadReactions } = require('./reactions');
 
 // Tiny Cookie-header parser (avoids depending on a library API that changed between major versions).
 function parseCookies(header) {
@@ -193,6 +194,7 @@ async function deliverPendingMessages(ws, userId) {
       AND m.id > COALESCE(cc.cleared_through_id, 0)
     ORDER BY m.id`)
     .all(userId, userId, userId, userId, userId);
+  const directReactions = await loadReactions(direct.map((m) => m.id), 'direct');
   direct.forEach((m) => send(ws, {
     type: 'message',
     message: {
@@ -200,6 +202,7 @@ async function deliverPendingMessages(ws, userId) {
       senderName: m.full_name, text: m.body, createdAt: m.created_at,
       deliveredAt: m.delivered_at, readAt: m.read_at, editedAt: m.edited_at,
       deleted: !!m.deleted_at,
+      reactions: directReactions.get(Number(m.id)) || [],
     },
   }));
 
@@ -214,6 +217,7 @@ async function deliverPendingMessages(ws, userId) {
     WHERE r.user_id = ? AND r.delivered_at IS NULL AND gm.deleted_at IS NULL
       AND h.message_id IS NULL AND gm.id > COALESCE(gc.cleared_through_id, 0)
     ORDER BY gm.id`).all(userId);
+  const groupReactions = await loadReactions(groups.map((m) => m.id), 'group');
   groups.forEach((m) => send(ws, {
     type: 'group_message',
     message: {
@@ -221,6 +225,7 @@ async function deliverPendingMessages(ws, userId) {
       senderName: m.sender_name, avatarVersion: m.avatar_version, text: m.body, createdAt: m.created_at,
       deliveredAt: m.delivered_at, readAt: m.read_at, editedAt: m.edited_at,
       deleted: !!m.deleted_at,
+      reactions: groupReactions.get(Number(m.id)) || [],
     },
   }));
 }

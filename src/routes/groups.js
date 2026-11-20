@@ -3,6 +3,7 @@ const db = require('../db');
 const rt = require('../realtime');
 const { markGroupRead } = require('../message-status');
 const { ensureAdminsInAllGroups } = require('../group-admins');
+const { isOneEmoji, loadReactions, attachReactions } = require('../reactions');
 
 const router = express.Router();
 const MAX_LEN = 4000;
@@ -42,7 +43,16 @@ const groupMessageOut = (m) => ({
   readAt: m.read_at,
   editedAt: m.edited_at,
   deleted: !!m.deleted_at,
+  reactions: [],
 });
+
+async function enrichGroupMessage(message) {
+  return attachReactions([message], await loadReactions([message.id], 'group'))[0];
+}
+
+async function groupReactionRows(messageId) {
+  return (await loadReactions([messageId], 'group')).get(Number(messageId)) || [];
+}
 
 async function groupMembership(groupId, userId) {
   return db.prepare(`SELECT g.id, g.name, g.created_by, g.created_at, gm.role,
@@ -153,7 +163,7 @@ router.get('/groups', async (req, res) => {
     .all(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id,
       req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id,
       req.user.id, req.user.id, req.user.id, req.user.id);
-  res.json({ groups: rows.map((g) => ({
+  const groups = rows.map((g) => ({
     id: g.id,
     name: g.name,
     createdAt: g.created_at,
@@ -169,7 +179,11 @@ router.get('/groups', async (req, res) => {
       createdAt: g.last_created_at,
     },
     unread: g.unread,
-  })) });
+  }));
+  const lastMessages = groups.filter((group) => group.lastMessage).map((group) => group.lastMessage);
+  const reactions = await loadReactions(lastMessages.map((message) => message.id), 'group');
+  lastMessages.forEach((message) => { message.reactions = reactions.get(Number(message.id)) || []; });
+  res.json({ groups });
 });
 
 router.get('/groups/:id/members', async (req, res) => {
@@ -205,7 +219,7 @@ router.get('/groups/:id/messages', async (req, res) => {
     .all(req.user.id, req.user.id, groupId, before, limit + 1);
   const hasMore = rows.length > limit;
   const selected = rows.slice(0, limit).reverse();
-  const page = selected.map(groupMessageOut);
+  const page = attachReactions(selected.map(groupMessageOut), await loadReactions(selected.map((message) => message.id), 'group'));
   const read = await db.prepare('SELECT last_read_message_id AS r FROM group_reads WHERE group_id = ? AND user_id = ?')
     .get(groupId, req.user.id);
   const firstUnread = await db.prepare(`SELECT gm.id FROM group_messages gm
@@ -360,7 +374,7 @@ router.patch('/groups/:id/messages/:messageId', async (req, res) => {
     FROM group_messages gm
     JOIN users u ON u.id = gm.sender_id
     LEFT JOIN user_avatars ua ON ua.user_id = u.id WHERE gm.id = ?`).get(messageId);
-  const updated = groupMessageOut(updatedRow);
+  const updated = await enrichGroupMessage(groupMessageOut(updatedRow));
   await rt.sendToGroupMembers(groupId, { type: 'message_edited', scope: 'group', message: updated });
   res.json({ message: updated });
 });
@@ -385,17 +399,56 @@ router.post('/groups/:id/messages/:messageId/delete', async (req, res) => {
   if (message.deleted_at) return res.status(409).json({ message: 'Message is already deleted.' });
   if (Date.now() - message.created_at > 60 * 60 * 1000) return res.status(409).json({ message: 'Messages can only be deleted for everyone within 1 hour.' });
   const deletedAt = Date.now();
-  const deletedCount = await db.prepare(`UPDATE group_messages SET body = 'This message was deleted', deleted_at = ?, edited_at = NULL
-    WHERE id = ? AND sender_id = ? AND deleted_at IS NULL AND created_at >= ?`)
-    .run(deletedAt, messageId, req.user.id, deletedAt - 60 * 60 * 1000);
+  const deletedCount = await db.transaction(async (tx) => {
+    const result = await tx.prepare(`UPDATE group_messages SET body = 'This message was deleted', deleted_at = ?, edited_at = NULL
+      WHERE id = ? AND sender_id = ? AND deleted_at IS NULL AND created_at >= ?`)
+      .run(deletedAt, messageId, req.user.id, deletedAt - 60 * 60 * 1000);
+    if (result.changes) await tx.prepare('DELETE FROM group_message_reactions WHERE message_id = ?').run(messageId);
+    return result;
+  });
   if (!deletedCount.changes) return res.status(409).json({ message: 'Messages can only be deleted for everyone within 1 hour.' });
   const updatedRow = await db.prepare(`SELECT gm.*, u.full_name AS sender_name, ua.updated_at AS avatar_version
     FROM group_messages gm
     JOIN users u ON u.id = gm.sender_id
     LEFT JOIN user_avatars ua ON ua.user_id = u.id WHERE gm.id = ?`).get(messageId);
-  const updated = groupMessageOut(updatedRow);
+  const updated = await enrichGroupMessage(groupMessageOut(updatedRow));
   await rt.sendToGroupMembers(groupId, { type: 'message_deleted', scope: 'group', message: updated });
   res.json({ ok: true, message: updated });
+});
+
+router.put('/groups/:id/messages/:messageId/reaction', async (req, res) => {
+  const groupId = Number(req.params.id), messageId = Number(req.params.messageId);
+  if (!await requireGroupMember(groupId, req.user.id, res)) return;
+  if (!Number.isSafeInteger(messageId) || messageId < 1) return res.status(400).json({ message: 'Invalid message ID.' });
+  const message = await db.prepare('SELECT * FROM group_messages WHERE id = ? AND group_id = ?').get(messageId, groupId);
+  if (!message) return res.status(404).json({ message: 'Message not found.' });
+  if (message.deleted_at) return res.status(409).json({ message: 'Deleted messages cannot be reacted to.' });
+  const emoji = (req.body || {}).emoji;
+  if (!isOneEmoji(emoji)) return res.status(400).json({ message: 'Choose exactly one emoji.' });
+  const existing = await db.prepare('SELECT emoji FROM group_message_reactions WHERE message_id = ? AND user_id = ?').get(messageId, req.user.id);
+  if (existing && existing.emoji === emoji) {
+    await db.prepare('DELETE FROM group_message_reactions WHERE message_id = ? AND user_id = ?').run(messageId, req.user.id);
+  } else {
+    await db.prepare(`INSERT INTO group_message_reactions (message_id, user_id, emoji, created_at) VALUES (?,?,?,?)
+      ON CONFLICT(message_id, user_id) DO UPDATE SET emoji = excluded.emoji, created_at = excluded.created_at`)
+      .run(messageId, req.user.id, emoji, Date.now());
+  }
+  const reactions = await groupReactionRows(messageId);
+  await rt.sendToGroupMembers(groupId, { type: 'message_reaction', scope: 'group', groupId, messageId, reactions });
+  res.json({ reactions });
+});
+
+router.delete('/groups/:id/messages/:messageId/reaction', async (req, res) => {
+  const groupId = Number(req.params.id), messageId = Number(req.params.messageId);
+  if (!await requireGroupMember(groupId, req.user.id, res)) return;
+  if (!Number.isSafeInteger(messageId) || messageId < 1) return res.status(400).json({ message: 'Invalid message ID.' });
+  const message = await db.prepare('SELECT * FROM group_messages WHERE id = ? AND group_id = ?').get(messageId, groupId);
+  if (!message) return res.status(404).json({ message: 'Message not found.' });
+  if (message.deleted_at) return res.status(409).json({ message: 'Deleted messages cannot be reacted to.' });
+  await db.prepare('DELETE FROM group_message_reactions WHERE message_id = ? AND user_id = ?').run(messageId, req.user.id);
+  const reactions = await groupReactionRows(messageId);
+  await rt.sendToGroupMembers(groupId, { type: 'message_reaction', scope: 'group', groupId, messageId, reactions });
+  res.json({ reactions });
 });
 
 router.post('/groups/:id/clear', async (req, res) => {
